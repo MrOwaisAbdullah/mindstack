@@ -1,0 +1,24 @@
+__pycache__/
+*.pyc
+.env
+.venv/
+venv/
+db.sqlite3
+/data/
+node_modules/
+.cache/
+staticfiles/
+.DS_Store
+secrets/
+.vscode/
+my_files/
+
+# Internal working docs — kept locally for the maintainer's sessions,
+# not part of the public tree. (They exist in pre-2026-08-08 history;
+# this keeps the front page curated, it does not unpublish them.)
+docs/LAUNCH.md
+docs/OPEN-SOURCE.md
+docs/PRE-LAUNCH-REVIEW.md
+docs/SETUP-DESIGN.md
+docs/UI-REWRITE.md
+docs/DOCS-LAB-FINDINGS.md
