@@ -1,0 +1,79 @@
+{% load static %}<!doctype html>
+<html lang="en" class="h-full">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{% block title %}{{ APP_NAME }}{% endblock %}</title>
+  <meta name="description" content="{% block meta_description %}{{ APP_NAME }} — the online head of a git-backed mind.{% endblock %}" />
+  <meta name="robots" content="noindex, nofollow" />
+  {% comment %}
+    Icons. There was no favicon at all, so every tab showed the browser's
+    blank-page glyph.
+
+    Order matters: the SVG comes first because browsers that support it
+    prefer it, and it is the only one that follows the OS light/dark
+    scheme (see the media query inside the file). The .ico is the
+    fallback for everything else and carries NATIVE 16/32/48 renders
+    rather than one image downscaled — at 16px a downscale turns the
+    fissure to grey mush. `sizes="any"` stops Chrome preferring the .ico
+    over the SVG.
+  {% endcomment %}
+  <link rel="icon" href="{% static 'img/brain-mark.svg' %}" type="image/svg+xml" sizes="any" />
+  <link rel="icon" href="{% static 'favicon.ico' %}" sizes="16x16 32x32 48x48" />
+  <link rel="apple-touch-icon" href="{% static 'img/apple-touch-icon.png' %}" />
+  <link rel="stylesheet" href="{% static 'css/tokens.css' %}" />
+  <link rel="stylesheet" href="{% static 'css/tw.css' %}" />
+  {% comment %}
+    Theme resolution. Everything for dark mode already existed — the
+    `.dark` block in tokens.css, the compiled `dark:` utilities, the
+    styleguide rendering both themes, the toggle partial — except the one
+    line that reads the stored choice back. Nothing anywhere called
+    `localStorage.getItem('theme')`, so `.dark` was never put on <html>
+    and the whole theme was dead.
+
+    Deliberately NOT deferred, and placed above the body: it has to run
+    before first paint, or every page load flashes light before
+    repainting dark. That is also why it is inline rather than a static
+    file — a blocking request for two dozen bytes of class toggling on
+    the critical path is the wrong trade.
+
+    No stored choice means follow the OS, which is what the toggle
+    partial's comment has always claimed and nothing implemented. The
+    matchMedia listener keeps that true if the OS flips mid-session, and
+    stops applying the moment the visitor makes an explicit choice.
+  {% endcomment %}
+  <script nonce="{{ csp_nonce }}">
+    (function () {
+      var root = document.documentElement;
+      function stored() {
+        try { return localStorage.getItem('theme'); } catch (e) { return null; }
+      }
+      function prefersDark() {
+        return !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+      }
+      function apply() {
+        var choice = stored();
+        root.classList.toggle('dark', choice === 'dark' || (choice !== 'light' && prefersDark()));
+      }
+      apply();
+      if (window.matchMedia) {
+        var query = window.matchMedia('(prefers-color-scheme: dark)');
+        var onChange = function () { if (!stored()) { apply(); } };
+        if (query.addEventListener) { query.addEventListener('change', onChange); }
+        else if (query.addListener) { query.addListener(onChange); }
+      }
+    })();
+  </script>
+  <script defer src="{% static 'vendor/alpine.min.js' %}" nonce="{{ csp_nonce }}"></script>
+  <script defer src="{% static 'vendor/lucide.min.js' %}" nonce="{{ csp_nonce }}"></script>
+  <script defer nonce="{{ csp_nonce }}">
+    document.addEventListener("DOMContentLoaded", function () {
+      if (window.lucide) { window.lucide.createIcons(); }
+    });
+  </script>
+  {% block head_extra %}{% endblock %}
+</head>
+<body class="brain-ui min-h-full">
+  {% block body %}{% endblock %}
+</body>
+</html>

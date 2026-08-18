@@ -1,0 +1,238 @@
+{% comment %}
+  One full pass over the component vocabulary. Included twice by
+  styleguide.html — once bare, once inside `.dark` — so every component is
+  reviewed in both themes without a page reload or a toggle to remember.
+
+  Included with: theme_label (heading), theme_class ("" or "dark").
+  No inline style attributes, by rule.
+{% endcomment %}
+
+<h2 class="section-title">{{ theme_label }}</h2>
+<div class="{{ theme_class }} rounded-card border border-line bg-surface p-5 text-ink">
+
+  {# ---------- tokens ---------- #}
+  <h3 class="mb-3 text-sm font-semibold">Semantic tokens</h3>
+  <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+    {% for var, name, purpose in semantic_tokens %}
+      <div class="flex items-center gap-3">
+        <span class="sg-swatch sg-swatch-{{ name }}"></span>
+        <div class="min-w-0">
+          <div class="text-sm font-medium">{{ name }}</div>
+          <div class="meta-label truncate">{{ purpose }}</div>
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+  <p class="field-hint mt-3">
+    Terminal scale — identical in both themes on purpose, because a log pane
+    is dark by design:
+  </p>
+  <div class="mt-2 flex flex-wrap gap-4">
+    {% for var, name, purpose in terminal_tokens %}
+      <div class="flex items-center gap-2">
+        <span class="sg-swatch sg-swatch-{{ name }}"></span>
+        <span class="meta-label">{{ name }}</span>
+      </div>
+    {% endfor %}
+  </div>
+
+  {# ---------- buttons ---------- #}
+  <h3 class="mb-3 mt-8 text-sm font-semibold">Buttons</h3>
+  <div class="flex flex-wrap items-center gap-2">
+    {% for cls, label in buttons %}
+      <button type="button" class="{{ cls }}">{{ label }}</button>
+    {% endfor %}
+  </div>
+  <div class="mt-3 flex flex-wrap items-center gap-2">
+    {% for cls, label in buttons %}
+      <button type="button" class="{{ cls }} btn-sm">{{ label }} sm</button>
+    {% endfor %}
+  </div>
+  <div class="mt-3 flex flex-wrap items-center gap-2">
+    <button type="button" class="btn-primary" disabled>Disabled</button>
+    <button type="button" class="btn-ghost" disabled>Disabled ghost</button>
+    <a href="#" class="link-accent text-sm">An accent link</a>
+  </div>
+
+  {# ---------- badges + dots ---------- #}
+  <h3 class="mb-3 mt-8 text-sm font-semibold">Badges &amp; status dots</h3>
+  <div class="flex flex-wrap items-center gap-2">
+    {% for cls, label in badges %}
+      <span class="badge {{ cls }}">{{ label }}</span>
+    {% endfor %}
+  </div>
+  <div class="mt-3 flex flex-wrap items-center gap-4">
+    {% for cls, label in dots %}
+      <span class="flex items-center gap-2 text-sm">
+        <span class="dot {{ cls }}"></span>{{ label }}
+      </span>
+    {% endfor %}
+  </div>
+
+  {# ---------- stat tiles ---------- #}
+  <h3 class="mb-3 mt-8 text-sm font-semibold">Stat tiles</h3>
+  <div class="grid gap-3 sm:grid-cols-3">
+    <div class="stat-tile">
+      <span class="stat-value">49</span>
+      <span class="stat-label">Entities</span>
+    </div>
+    <div class="stat-tile">
+      <span class="stat-value">1,204</span>
+      <span class="stat-label">Reads this week</span>
+    </div>
+    <div class="stat-tile">
+      <span class="stat-value">3</span>
+      <span class="stat-label">Pending feeds</span>
+    </div>
+  </div>
+
+  {# ---------- cards ---------- #}
+  <h3 class="mb-3 mt-8 text-sm font-semibold">Cards</h3>
+  <div class="grid gap-3 lg:grid-cols-2">
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">Card with header</span>
+        <span class="badge badge-ok">current</span>
+      </div>
+      <div class="card-body">
+        <p class="text-sm">
+          Card body text. The header and footer carry their own dividers so a
+          card can be built out of parts without every page re-deciding the
+          padding.
+        </p>
+      </div>
+      <div class="card-footer">
+        <button type="button" class="btn-primary btn-sm">Save</button>
+        <button type="button" class="btn-ghost btn-sm">Cancel</button>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-row">
+        <div class="flex items-center gap-2 text-sm">
+          <span class="dot dot-ok"></span>A row in a stacked list
+        </div>
+      </div>
+      <div class="card-row">
+        <div class="flex items-center gap-2 text-sm">
+          <span class="dot dot-warn"></span>Rows divide themselves
+        </div>
+      </div>
+      <div class="card-row">
+        <div class="flex items-center gap-2 text-sm">
+          <span class="dot dot-muted"></span>The last one has no divider
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {# ---------- definition grid ---------- #}
+  <h3 class="mb-3 mt-8 text-sm font-semibold">Definition grid</h3>
+  <div class="card">
+    <div class="card-body">
+      <dl class="meta-grid">
+        <div>
+          <dt class="meta-label">Configured remote</dt>
+          <dd class="meta-value">git@github.com:owner/brain.git</dd>
+        </div>
+        <div>
+          <dt class="meta-label">Read credential</dt>
+          <dd class="meta-value">deploy key (generated)</dd>
+        </div>
+      </dl>
+    </div>
+  </div>
+
+  {# ---------- tables ---------- #}
+  <h3 class="mb-3 mt-8 text-sm font-semibold">Table</h3>
+  <div class="card">
+    <div class="table-wrap">
+      <table class="table table-hover">
+        <thead>
+          <tr><th>Entity</th><th>Kind</th><th>Status</th><th>Updated</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="font-mono text-xs">take-2026-07-rag-vs-finetuning</td>
+            <td>take</td>
+            <td><span class="badge badge-ok">current</span></td>
+            <td class="meta-value text-xs">2026-07</td>
+          </tr>
+          <tr>
+            <td class="font-mono text-xs">story-2026-05-cloud-bills</td>
+            <td>story</td>
+            <td><span class="badge badge-muted">superseded</span></td>
+            <td class="meta-value text-xs">2026-05</td>
+          </tr>
+          <tr>
+            <td class="font-mono text-xs">lesson-2026-06-webhook-retries</td>
+            <td>lesson</td>
+            <td><span class="badge badge-warn">stale</span></td>
+            <td class="meta-value text-xs">2026-06</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  {# ---------- form fields ---------- #}
+  <h3 class="mb-3 mt-8 text-sm font-semibold">Form fields</h3>
+  <div class="card">
+    <div class="card-body grid gap-4 sm:grid-cols-2">
+      <div class="field">
+        <label class="field-label" for="sg-text-{{ theme_class|default:'light' }}">Repository URL</label>
+        <input class="field-input" id="sg-text-{{ theme_class|default:'light' }}"
+               type="text" placeholder="git@github.com:owner/brain.git">
+        <p class="field-hint">SSH or HTTPS. The server refuses a clone whose origin differs.</p>
+      </div>
+      <div class="field">
+        <label class="field-label" for="sg-select-{{ theme_class|default:'light' }}">Visibility</label>
+        <select class="field-select" id="sg-select-{{ theme_class|default:'light' }}">
+          <option>public</option>
+          <option>agents-only</option>
+          <option>private</option>
+        </select>
+        <p class="field-error">This field is required.</p>
+      </div>
+      <div class="field sm:col-span-2">
+        <label class="field-label" for="sg-key-{{ theme_class|default:'light' }}">Deploy key</label>
+        <textarea class="field-textarea field-mono" rows="2"
+                  id="sg-key-{{ theme_class|default:'light' }}"
+                  readonly>ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI… brain-app</textarea>
+      </div>
+    </div>
+  </div>
+
+  {# ---------- notices ---------- #}
+  <h3 class="mb-3 mt-8 text-sm font-semibold">Notices</h3>
+  <div class="grid gap-2">
+    {% for cls, text in notices %}
+      <div class="{% if cls != 'notice' %}notice {% endif %}{{ cls }}">{{ text }}</div>
+    {% endfor %}
+  </div>
+
+  {# ---------- terminal pane ---------- #}
+  <h3 class="mb-3 mt-8 text-sm font-semibold">Terminal pane</h3>
+  <pre class="pane-terminal overflow-x-auto p-3 text-xs">$ brain sync --no-pull
+resolved 49 entities, 3 superseded
+rebuilt snapshots: public agents-only private
+done in 1.4s</pre>
+
+  {# ---------- empty state ---------- #}
+  <h3 class="mb-3 mt-8 text-sm font-semibold">Empty state</h3>
+  <div class="empty-state">
+    <span class="empty-state-title">No feeds waiting</span>
+    <span class="text-sm">Proposed sources land here for approval before anything is written.</span>
+    <button type="button" class="btn-primary btn-sm mt-2">Feed something</button>
+  </div>
+
+  {# ---------- typography ---------- #}
+  <h3 class="mb-3 mt-8 text-sm font-semibold">Typography</h3>
+  <div class="card">
+    <div class="card-body">
+      <p class="page-title">Page title — Space Grotesk</p>
+      <p class="page-subtitle">Page subtitle, muted, Inter.</p>
+      <p class="mt-3 text-sm">Body copy at text-sm, which is the ops UI default.</p>
+      <p class="meta-value mt-2 text-xs">Monospace — JetBrains Mono, for ids and paths.</p>
+    </div>
+  </div>
+</div>

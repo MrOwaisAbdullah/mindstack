@@ -1,0 +1,126 @@
+{% extends "docs/_layout.html" %}
+{% load i18n %}
+{% comment %}
+  Phase 10.4.2-5 — per-endpoint detail page.
+
+  Layout (top → bottom):
+    1. Header — method pill / slug / version / deprecated.
+    2. Description + path callout.
+    3. Tabs: REST | MCP | Python SDK | JS SDK (Alpine, no HTMX).
+    4. Schema sections — Input + Output tables with collapsible
+       <details> per nested object type.
+    5. Try-it placeholder (G4 swaps in the real form).
+{% endcomment %}
+
+{% block page_title_tag %}{% blocktrans with slug=spec.slug %}{{ slug }} · Docs{% endblocktrans %}{% endblock %}
+{% block page_title %}{{ spec.slug }}{% endblock %}
+{% block page_subtitle %}
+  <div class="mt-2 flex flex-wrap items-center gap-2 text-sm">
+    <span class="inline-flex items-center rounded bg-brand-100 px-2 py-0.5 font-mono text-xs font-semibold text-brand-700 dark:bg-brand-950 dark:text-brand-400">{{ spec.method }}</span>
+    <code class="font-mono text-zinc-700 dark:text-zinc-300">/api/{{ spec.version }}/{{ spec.slug }}</code>
+    {% if spec.is_deprecated %}
+      <span class="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-amber-700 dark:bg-amber-950 dark:text-amber-400">{% trans "deprecated" %}</span>
+    {% endif %}
+    {% for tag in spec.tags %}
+      <span class="inline-flex items-center rounded bg-zinc-100 px-1.5 py-0.5 font-mono text-[10px] text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">{{ tag }}</span>
+    {% endfor %}
+  </div>
+  {% if spec.description %}
+    <p class="mt-3 text-sm text-zinc-600 dark:text-zinc-400">{{ spec.description }}</p>
+  {% endif %}
+{% endblock %}
+
+{% block content %}
+
+{# ---- 0. FinalPolish F3 — deprecation / sunset banners ---- #}
+{% if bundle.deprecation_state == "sunset_past" %}
+  <div role="alert" class="mb-6 rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-900 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200">
+    <p class="font-semibold">Removed on {{ bundle.sunset_at_iso }}</p>
+    <p class="mt-1 text-red-800 dark:text-red-300">
+      {% if bundle.deprecation_message %}{{ bundle.deprecation_message }}{% else %}This endpoint has been sunset and no longer accepts calls. The REST view returns <code class="text-xs">410 Gone</code> and the MCP tool returns an <code class="text-xs">endpoint_sunset</code> error.{% endif %}
+    </p>
+  </div>
+{% elif bundle.deprecation_state == "sunset_upcoming" %}
+  <div role="alert" class="mb-6 rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-900 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200">
+    <p class="font-semibold">Scheduled for removal on {{ bundle.sunset_at_iso }}</p>
+    <p class="mt-1 text-red-800 dark:text-red-300">
+      {% if bundle.deprecation_message %}{{ bundle.deprecation_message }}{% else %}This endpoint is still callable but will be removed on the date above. Plan your migration before then — calls after sunset return <code class="text-xs">410 Gone</code>.{% endif %}
+    </p>
+  </div>
+{% elif bundle.deprecation_state == "deprecated" %}
+  <div role="alert" class="mb-6 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+    <p class="font-semibold">Deprecated{% if bundle.deprecated_at_iso %} since {{ bundle.deprecated_at_iso }}{% endif %}</p>
+    <p class="mt-1 text-amber-800 dark:text-amber-300">
+      {% if bundle.deprecation_message %}{{ bundle.deprecation_message }}{% else %}This endpoint is still callable but new integrations should pick a replacement — responses carry <code class="text-xs">Deprecation</code> + <code class="text-xs">Link</code> headers (RFC 8594).{% endif %}
+    </p>
+  </div>
+{% endif %}
+
+{# ---- 1. Tabs (REST / MCP / Python / JS) ---- #}
+<section class="mb-8" x-data="{ tab: 'rest' }">
+  <div class="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-200 dark:border-zinc-800">
+    <div role="tablist" aria-label="Code examples" class="-mb-px flex flex-wrap gap-1">
+      <button type="button" role="tab" :aria-selected="tab === 'rest'" x-on:click="tab = 'rest'"
+              :class="tab === 'rest' ? 'border-brand-500 text-brand-700 dark:text-brand-400' : 'border-transparent text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100'"
+              class="border-b-2 px-3 py-2 text-sm font-medium transition focus-visible:ring-2 focus-visible:ring-brand-500">REST (curl)</button>
+      <button type="button" role="tab" :aria-selected="tab === 'mcp'" x-on:click="tab = 'mcp'"
+              :class="tab === 'mcp' ? 'border-brand-500 text-brand-700 dark:text-brand-400' : 'border-transparent text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100'"
+              class="border-b-2 px-3 py-2 text-sm font-medium transition focus-visible:ring-2 focus-visible:ring-brand-500">MCP setup</button>
+      <button type="button" role="tab" :aria-selected="tab === 'python'" x-on:click="tab = 'python'"
+              :class="tab === 'python' ? 'border-brand-500 text-brand-700 dark:text-brand-400' : 'border-transparent text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100'"
+              class="border-b-2 px-3 py-2 text-sm font-medium transition focus-visible:ring-2 focus-visible:ring-brand-500">Python SDK</button>
+      <button type="button" role="tab" :aria-selected="tab === 'js'" x-on:click="tab = 'js'"
+              :class="tab === 'js' ? 'border-brand-500 text-brand-700 dark:text-brand-400' : 'border-transparent text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100'"
+              class="border-b-2 px-3 py-2 text-sm font-medium transition focus-visible:ring-2 focus-visible:ring-brand-500">JS SDK</button>
+    </div>
+  </div>
+
+  {# REST tab #}
+  <div role="tabpanel" x-show="tab === 'rest'" class="mt-4">
+    {% if bundle.is_anonymous %}
+      <p class="mb-3 rounded-lg border border-brand-200 bg-brand-50 px-3 py-2 text-xs text-brand-900 dark:border-brand-900 dark:bg-brand-950/40 dark:text-brand-200">
+        Every call requires <code class="text-[11px]">Authorization: Bearer &lt;key&gt;</code> — there is no anonymous tier. Mint one under <a class="underline" href="{% url 'brainconfig:consumers' %}">API keys</a>.
+      </p>
+    {% else %}
+      <p class="mb-3 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs text-zinc-600 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400">
+        You have <span class="font-medium tabular-nums text-zinc-900 dark:text-zinc-100">{{ bundle.user_active_keys }}</span> active key{{ bundle.user_active_keys|pluralize }} — mint, rotate and revoke them under <a class="underline" href="{% url 'brainconfig:consumers' %}">API keys</a>. Replace <code class="text-[11px]">mcpsk_&lt;your_api_key&gt;</code> below with one of yours.
+      </p>
+    {% endif %}
+    {{ bundle.curl_html|safe }}
+  </div>
+
+  {# MCP tab #}
+  <div role="tabpanel" x-show="tab === 'mcp'" x-cloak class="mt-4">
+    <p class="mb-3 text-xs text-zinc-500 dark:text-zinc-400">
+      Add this server to Claude Desktop's <code class="text-[11px]">claude_desktop_config.json</code>. The endpoint becomes a callable tool inside Claude. See the <a href="{% url 'docs:guide' 'mcp-setup' %}" class="font-medium text-brand-600 hover:underline dark:text-brand-400">MCP setup guide</a> for the full walk-through.
+    </p>
+    {{ bundle.mcp_config_html|safe }}
+    <p class="mt-3 text-xs text-zinc-500 dark:text-zinc-400">
+      Inside Claude this endpoint surfaces as the tool <code class="font-mono text-[11px] text-zinc-700 dark:text-zinc-300">{{ spec.mcp_tool_name }}</code>.
+    </p>
+  </div>
+
+  {# Python tab #}
+  <div role="tabpanel" x-show="tab === 'python'" x-cloak class="mt-4">
+    <p class="mb-3 text-xs text-zinc-500 dark:text-zinc-400">
+      Standard <code class="text-[11px]">requests</code> — no custom SDK needed. <code class="text-[11px]">pip install requests</code> first.
+    </p>
+    {{ bundle.python_html|safe }}
+  </div>
+
+  {# JS tab #}
+  <div role="tabpanel" x-show="tab === 'js'" x-cloak class="mt-4">
+    <p class="mb-3 text-xs text-zinc-500 dark:text-zinc-400">
+      Plain <code class="text-[11px]">fetch</code>. Works in Node 18+, Deno, Bun, and any modern browser.
+    </p>
+    {{ bundle.js_html|safe }}
+  </div>
+</section>
+
+{# ---- 2. Schema tables ---- #}
+{% include "docs/_schema_table.html" with title="Input" fields=bundle.input_fields empty_msg="This endpoint takes no input." %}
+{% include "docs/_schema_table.html" with title="Output" fields=bundle.output_fields empty_msg="This endpoint returns no body." %}
+
+{# ---- 3. Try-it panel (G4) ---- #}
+{% include "docs/_try_it.html" %}
+{% endblock %}

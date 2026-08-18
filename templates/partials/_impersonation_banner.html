@@ -1,0 +1,40 @@
+{% comment %}
+  Customer impersonation banner.
+
+  Rendered above the body of every page in `base.html` when
+  `ImpersonationBannerMiddleware` (apps/accounts/middleware.py) stamps
+  `request.impersonation_active = True` from the
+  `session["impersonating"]` blob.
+
+  Why the loud red: this banner is the operator's only persistent
+  reminder that any state-changing click on the page will be attributed
+  to the TARGET user, not them. A subtle yellow strip is too easy to
+  miss after a few minutes of debugging.
+
+  The End-impersonation link goes to the `account_impersonate_end`
+  GET view (registered in apps/accounts/urls.py), which pops the
+  session blob, rotates the CSRF token, restores the operator's
+  identity, and redirects back to /admin/users/<target_id>/. Idempotent
+  — repeated clicks land harmlessly on /.
+{% endcomment %}
+{% load i18n %}
+{% if request.impersonation_active %}
+  <div role="alert"
+       aria-live="polite"
+       class="sticky top-0 z-50 flex w-full items-center justify-between gap-3 border-b border-rose-700 bg-rose-600 px-4 py-2 text-sm font-medium text-white shadow-sm">
+    <div class="flex min-w-0 items-center gap-2">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4 shrink-0" aria-hidden="true">
+        <path d="M12 9v3m0 3h.01M5.07 19h13.86c1.54 0 2.5-1.67 1.73-3L13.73 4a2 2 0 0 0-3.46 0L3.34 16c-.77 1.33.19 3 1.73 3z" />
+      </svg>
+      <span class="truncate">
+        {% blocktrans trimmed with target=request.impersonation_target_email|default:_("target user") operator=request.impersonator_email|default:_("unknown") %}
+          Impersonating <strong class="font-semibold">{{ target }}</strong> as operator <strong class="font-semibold">{{ operator }}</strong>
+        {% endblocktrans %}
+      </span>
+    </div>
+    <a href="{% url 'account_impersonate_end' %}"
+       class="shrink-0 rounded-md border border-white/40 bg-rose-700 px-2.5 py-1 text-xs font-semibold text-white shadow-sm hover:bg-rose-800 focus:outline-none focus:ring-2 focus:ring-white">
+      {% trans "End impersonation" %}
+    </a>
+  </div>
+{% endif %}

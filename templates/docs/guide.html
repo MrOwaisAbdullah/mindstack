@@ -1,0 +1,16 @@
+{% extends "docs/_layout.html" %}
+{% load i18n %}
+{% comment %}
+  static guide page. Renders pre-rendered HTML from
+  `apps/docs/guides/<slug>.md` inside the docs prose container. The
+  layout's `prose-zinc dark:prose-invert` wrap handles all the typography.
+{% endcomment %}
+
+{% block page_title %}{{ bundle.title }}{% endblock %}
+{% block page_title_tag %}{% blocktrans with title=bundle.title %}{{ title }} · Docs{% endblocktrans %}{% endblock %}
+
+{% block content %}
+<article class="prose prose-zinc max-w-none dark:prose-invert">
+  {{ bundle.html|safe }}
+</article>
+{% endblock %}

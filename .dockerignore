@@ -1,0 +1,11 @@
+.env
+.venv/
+venv/
+db.sqlite3
+data/
+secrets/
+__pycache__/
+staticfiles/
+.git/
+
+

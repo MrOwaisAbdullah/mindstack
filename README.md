@@ -131,13 +131,12 @@ terminal after the compose command. On Coolify it is shorter still:
 
 ## Your brain repo
 
-Start from the
-[brainoutside-template](https://github.com/hassancs91/brainoutside-template)
-repo (developed in-tree at [`brain-template/`](brain-template/)): the
-contract, both agent
-skills, note templates and placeholder identity files. It ships with zero
-notes on purpose — an empty brain that is truly yours beats a seeded one
-you have to clean out.
+The brain template lives in its own repo, separate from this server —
+not in-tree here. Mine is `mindstack-brain`, a private fork of
+[brainoutside-template](https://github.com/hassancs91/brainoutside-template):
+the contract, both agent skills, note templates and identity files. It
+ships with zero notes on purpose — an empty brain that is truly yours
+beats a seeded one you have to clean out.
 
 ## Docs
 

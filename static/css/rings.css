@@ -1,0 +1,230 @@
+/* ============================================================
+   M3.5.2 — visibility rings. Concentric tiers (private core →
+   agents-only → public rim), one dot per entity, coloured by kind
+   and sized by how often it was actually served.
+
+   Styles live in a file, not in `style=` attributes: the prod CSP
+   ships `style-src 'self' 'nonce-…'` with no 'unsafe-inline'.
+   ============================================================ */
+
+.rings {
+  position: relative;
+  width: 100%;
+}
+
+.rings-figure {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-width: 480px;
+  margin: 0 auto;
+  overflow: visible;
+}
+
+/* Phone widths scale the 760-unit viewBox down to ~0.4×, taking the
+   12px (SVG-unit) tier labels to ~5px and the dots to specks. Rescale
+   both: labels get bigger units, dots scale around their own centre
+   (fill-box keeps position). The ping halo is untouched — it animates
+   transform and must start from scale(1). */
+@media (max-width: 639px) {
+  .rings-label {
+    font-size: 22px;
+  }
+  .rings-dot {
+    transform-box: fill-box;
+    transform-origin: center;
+    transform: scale(1.75);
+  }
+}
+
+/* Hero layout: figure beside its legend once there is room, so the card
+   holds ~half the height it needed with everything stacked. The legend
+   wrap (.rings-side, built by rings.js) becomes the right rail. */
+@media (min-width: 1024px) {
+  .rings {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 220px;
+    gap: 8px 24px;
+    align-items: center;
+  }
+  .rings-side {
+    margin-top: 0;
+  }
+}
+
+/* ---- Kind colours ----
+   The .viz-kind-* classes (compiled app.css, from the --viz-* tokens
+   in tokens.css) put the categorical colour in --kind-color; dot fill,
+   hollow stroke, ping halo and legend swatch all read it, so the theme
+   toggle recolours a drawn SVG with no JS redraw. Unknown kinds fall
+   back to the catalog slot via var()'s second argument. */
+.rings-dot {
+  cursor: pointer;
+  transition: opacity 0.12s ease;
+  fill: var(--kind-color, var(--viz-catalog));
+  stroke: var(--kind-color, var(--viz-catalog));
+}
+.rings-dot-hollow {
+  fill: none;
+}
+.rings-dot:hover {
+  opacity: 1 !important;
+}
+
+/* Everything dims while one dot is hovered, so the hovered entity and
+   its ring read instantly even at 40+ dots. */
+.rings-figure.is-focused .rings-dot {
+  opacity: 0.25;
+}
+
+/* Zones are drawn outermost-first and stack, so each step inward is
+   visibly deeper — public teal, agents-only indigo, private ink. The
+   tiers are what the server enforces; the picture should say so. */
+.rings-band-public {
+  fill: rgba(77, 184, 168, 0.07);
+  stroke: rgba(77, 184, 168, 0.28);
+  stroke-width: 1;
+}
+.rings-band-agents-only {
+  fill: rgba(99, 102, 241, 0.07);
+  stroke: rgba(99, 102, 241, 0.22);
+  stroke-width: 1;
+}
+.rings-band-private {
+  fill: rgba(26, 26, 46, 0.07);
+  stroke: rgba(26, 26, 46, 0.18);
+  stroke-width: 1;
+}
+.rings-guide {
+  fill: none;
+  stroke: rgba(26, 26, 46, 0.14);
+  stroke-width: 1;
+  stroke-dasharray: 2 6;
+}
+.rings-label {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  fill: var(--muted);
+  text-anchor: middle;
+  dominant-baseline: middle;
+  letter-spacing: 0.02em;
+}
+.rings-label-count {
+  fill: var(--ink);
+}
+
+/* M3.5.4 — a halo that expands and fades when the note behind it is
+   served. `transform-box: fill-box` makes the scale happen around the
+   dot rather than the SVG origin. */
+.rings-ping {
+  fill: none;
+  stroke: var(--kind-color, var(--viz-catalog));
+  stroke-width: 2;
+  pointer-events: none;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: rings-ping 1100ms ease-out forwards;
+}
+@keyframes rings-ping {
+  from {
+    transform: scale(1);
+    opacity: 0.65;
+  }
+  to {
+    transform: scale(4.5);
+    opacity: 0;
+  }
+}
+
+.rings-tip {
+  position: absolute;
+  z-index: 20;
+  min-width: 180px;
+  max-width: 300px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+  font-size: 12px;
+  line-height: 1.45;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.1s ease;
+}
+.rings-tip.is-on {
+  opacity: 1;
+}
+.rings-tip-title {
+  font-weight: 600;
+  color: var(--ink);
+}
+.rings-tip-id {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.rings-tip-meta {
+  margin-top: 4px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.rings-side {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 12px;
+}
+.rings-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  align-items: center;
+  font-size: 12px;
+  color: var(--muted);
+}
+/* In the side rail the legend stacks; counts right-align down a column
+   so the list reads as a small table. */
+@media (min-width: 1024px) {
+  .rings-legend {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 5px;
+  }
+  .rings-legend-item {
+    justify-content: space-between;
+  }
+}
+.rings-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.rings-legend-label {
+  flex: 1;
+}
+.rings-swatch {
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  display: inline-block;
+  background: var(--kind-color, var(--viz-catalog));
+}
+.rings-legend-n {
+  font-family: var(--font-mono);
+  color: var(--ink);
+}
+
+.rings-note {
+  font-size: 11px;
+  color: var(--muted);
+}
+.rings-status {
+  padding: 24px 0;
+  text-align: center;
+  font-size: 13px;
+  color: var(--muted);
+}

@@ -1,0 +1,34 @@
+{% comment %}
+  branded empty state for tables/lists/charts.
+
+  Parameters:
+    title       — required headline ("No API keys yet")
+    body        — explanatory paragraph (optional)
+    cta_label   — primary action label (optional)
+    cta_url     — primary action URL (optional)
+    icon        — illustration accent ("table" / "chart" / "key" / "users" / "webhook" / default abstract)
+{% endcomment %}
+<div class="flex flex-col items-center justify-center rounded-xl border border-dashed border-zinc-300 bg-white px-6 py-12 text-center dark:border-zinc-700 dark:bg-zinc-950">
+  <div class="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-zinc-100 text-zinc-400 dark:bg-zinc-800 dark:text-zinc-500" aria-hidden="true">
+    {% if icon == "table" %}
+      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 9h18M3 15h18M9 3v18M15 3v18"/></svg>
+    {% elif icon == "chart" %}
+      {% include "partials/_icon.html" with name="chart" %}
+    {% elif icon == "key" %}
+      {% include "partials/_icon.html" with name="key" %}
+    {% elif icon == "users" %}
+      {% include "partials/_icon.html" with name="users" %}
+    {% elif icon == "webhook" %}
+      {% include "partials/_icon.html" with name="webhook" %}
+    {% else %}
+      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9 9h.01M15 9h.01M9.5 15a3 3 0 0 1 5 0"/></svg>
+    {% endif %}
+  </div>
+  <h3 class="text-base font-semibold text-zinc-900 dark:text-zinc-50">{{ title }}</h3>
+  {% if body %}
+    <p class="mt-1 max-w-md text-sm text-zinc-500 dark:text-zinc-400">{{ body }}</p>
+  {% endif %}
+  {% if cta_label and cta_url %}
+    <a href="{{ cta_url }}" class="btn btn-primary mt-5 text-sm">{{ cta_label }}</a>
+  {% endif %}
+</div>

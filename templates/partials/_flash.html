@@ -1,0 +1,27 @@
+{% comment %}
+  Django messages framework rendering. Server-side flash
+  shown on next page load. Distinct from `_toast.html` which is the
+  HTMX-driven `HX-Trigger: show-toast` channel for inline updates.
+
+  Tagged variants: success / error / warning / info / debug.
+{% endcomment %}
+{% if messages %}
+  <div class="mb-6 space-y-2" role="status" aria-live="polite">
+    {% for m in messages %}
+      <div class="flex items-start gap-3 rounded-lg border px-4 py-3 text-sm
+        {% if 'error' in m.tags or 'danger' in m.tags %}border-rose-300 bg-rose-50 text-rose-900 dark:border-rose-800 dark:bg-rose-950/40 dark:text-rose-200
+        {% elif 'warning' in m.tags %}border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200
+        {% elif 'success' in m.tags %}border-emerald-300 bg-emerald-50 text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200
+        {% else %}border-zinc-300 bg-zinc-50 text-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100{% endif %}">
+        <span aria-hidden="true" class="mt-0.5">
+          {% if 'error' in m.tags or 'danger' in m.tags or 'warning' in m.tags %}
+            {% include "partials/_icon.html" with name="alert" %}
+          {% else %}
+            {% include "partials/_icon.html" with name="activity" %}
+          {% endif %}
+        </span>
+        <p class="flex-1">{{ m }}</p>
+      </div>
+    {% endfor %}
+  </div>
+{% endif %}

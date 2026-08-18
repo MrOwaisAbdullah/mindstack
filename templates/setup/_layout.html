@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% comment %}
+  Wizard chrome: a step rail plus one card. Deliberately not the ops
+  layout — there is no ops nav to offer yet, and every link that goes
+  somewhere unconfigured is a dead end for a first-time operator.
+
+  Pages provide {% block step_title %} / {% block step_body %}.
+{% endcomment %}
+{% load static %}
+
+{% block title %}Set up {{ APP_NAME }}{% endblock %}
+
+{% block body %}
+<main class="min-h-screen px-6 py-10 bg-surface-2 text-ink">
+  <div class="mx-auto max-w-3xl">
+
+    <div class="flex items-center gap-3">
+      {# The mark, not the hero: at 40px the hero's synapse nodes are ~1px of mud. #}
+      {% include "partials/_brand_mark.html" with size="h-10 w-10" %}
+      <h1 class="text-2xl font-bold tracking-tight font-display">
+        Set up {{ APP_NAME }}
+      </h1>
+    </div>
+
+    <ol class="mt-6 flex flex-wrap gap-x-2 gap-y-2 text-xs">
+      {% for s in steps %}
+        <li class="flex items-center gap-1.5 rounded-pill border border-line px-3 py-1
+                   {% if s.slug == current %}bg-ink text-surface
+                   {% elif s.done %}text-signal-ink
+                   {% else %}text-muted{% endif %}">
+          <span class="font-mono">{{ forloop.counter }}</span>
+          <span>{{ s.title }}</span>
+          {% if s.done %}<span aria-label="done">&check;</span>
+          {% elif s.skipped %}<span aria-label="skipped">&ndash;</span>{% endif %}
+        </li>
+      {% endfor %}
+    </ol>
+
+    {% include "partials/_flash.html" %}
+
+    <section class="mt-6 rounded-xl border p-6 border-line bg-surface">
+      <h2 class="text-lg font-semibold font-display">
+        {% block step_title %}{% endblock %}
+      </h2>
+      <p class="mt-1 text-sm text-muted">{% block step_blurb %}{% endblock %}</p>
+
+      <div class="mt-5">{% block step_body %}{% endblock %}</div>
+    </section>
+
+    <p class="mt-6 text-xs text-muted">
+      Step {{ current_index|add:1 }} of {{ total_steps }}.
+      {% if not setup_complete %}You can leave and come back — nothing is lost.{% endif %}
+    </p>
+  </div>
+</main>
+{% endblock %}

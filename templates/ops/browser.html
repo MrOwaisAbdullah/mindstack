@@ -1,0 +1,115 @@
+{% extends "ops/_layout.html" %}
+
+{% block page_title_tag %}Brain browser{% endblock %}
+{% block page_title %}Brain browser{% endblock %}
+{% block page_subtitle %}
+  <p class="mt-1 text-sm text-muted">
+    {% if page_obj.paginator.count %}
+      Showing {{ page_obj.start_index }}&ndash;{{ page_obj.end_index }} of {{ page_obj.paginator.count }}
+      entit{{ page_obj.paginator.count|pluralize:"y,ies" }}{% if page_obj.paginator.count != total %} (filtered from {{ total }}){% endif %}
+    {% else %}
+      No matches among {{ total }} entities
+    {% endif %}
+    — the index as the server sees it (full private view).
+  </p>
+{% endblock %}
+{% block content_width %}max-w-[1600px]{% endblock %}
+
+{% block content %}
+  <form method="get" class="card mb-4 flex flex-wrap items-end gap-3 p-4">
+    <label class="text-sm">
+      <span class="mb-1 block text-xs text-muted">Kind</span>
+      <select name="kind" class="field-select">
+        <option value="">all</option>
+        {% for k in kinds %}<option value="{{ k }}" {% if k == f_kind %}selected{% endif %}>{{ k }}</option>{% endfor %}
+      </select>
+    </label>
+    <label class="text-sm">
+      <span class="mb-1 block text-xs text-muted">Visibility</span>
+      <select name="visibility" class="field-select">
+        <option value="">all</option>
+        {% for v in visibilities %}<option value="{{ v }}" {% if v == f_visibility %}selected{% endif %}>{{ v }}</option>{% endfor %}
+      </select>
+    </label>
+    <label class="text-sm">
+      <span class="mb-1 block text-xs text-muted">Status</span>
+      <select name="status" class="field-select">
+        <option value="">all</option>
+        <option value="current" {% if f_status == "current" %}selected{% endif %}>current</option>
+        <option value="superseded" {% if f_status == "superseded" %}selected{% endif %}>superseded</option>
+      </select>
+    </label>
+    <label class="min-w-40 grow text-sm">
+      <span class="mb-1 block text-xs text-muted">Search</span>
+      <input type="text" name="q" value="{{ f_q }}" placeholder="id, title, topic or project"
+             class="field-input field-mono" />
+    </label>
+    <button type="submit" class="btn-primary">Filter</button>
+    <a href="{% url 'brainconfig:browser' %}" class="btn-ghost">Reset</a>
+  </form>
+
+  <div class="card table-wrap">
+    <table class="table table-hover">
+      <thead>
+        <tr>
+          <th>Entity</th>
+          <th>Kind</th>
+          <th>Visibility</th>
+          <th>Status</th>
+          <th>Date / verified</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+          <tr>
+            <td>
+              <a class="text-accent" href="{% url 'brainconfig:entity' row.e.entity_id %}">{{ row.e.entity_id }}</a>
+              {% if row.e.title %}<div class="mt-0.5 text-xs text-muted">{{ row.e.title }}</div>{% endif %}
+            </td>
+            <td class="whitespace-nowrap">
+              <span class="viz-kind-{{ row.e.kind }} inline-flex items-center gap-1.5">
+                <span class="dot dot-kind"></span>{{ row.e.kind }}
+              </span>
+            </td>
+            <td>
+              <span class="badge {% if row.e.visibility == 'public' %}badge-ok{% elif row.e.visibility == 'private' %}badge-ink{% else %}badge-info{% endif %}">
+                {{ row.e.visibility }}
+              </span>
+            </td>
+            <td class="whitespace-nowrap">
+              {% if row.e.status == "current" %}
+                <span class="text-xs text-muted">current</span>
+              {% else %}
+                <span class="badge badge-muted">{{ row.e.status }}</span>
+              {% endif %}
+              {% if row.stale %}<span class="badge badge-warn ms-1">stale</span>{% endif %}
+            </td>
+            <td class="whitespace-nowrap text-xs font-mono text-muted">
+              {{ row.e.date|default:"—" }}{% if row.e.last_verified %} · verified {{ row.e.last_verified|date:"M j" }}{% endif %}
+            </td>
+          </tr>
+        {% empty %}
+          <tr>
+            <td colspan="5" class="px-4 py-10 text-center text-muted">
+              No entities match — <a class="link-accent" href="{% url 'brainconfig:browser' %}">clear the filters</a>.
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% if page_obj.paginator.num_pages > 1 %}
+    <nav class="mt-4 flex flex-wrap items-center justify-between gap-3" aria-label="Pagination">
+      <span class="text-xs text-muted">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+      <div class="flex gap-2">
+        {% if page_obj.has_previous %}
+          <a class="btn-ghost btn-sm" href="?{% if filter_qs %}{{ filter_qs }}&amp;{% endif %}page={{ page_obj.previous_page_number }}">&larr; Previous</a>
+        {% endif %}
+        {% if page_obj.has_next %}
+          <a class="btn-ghost btn-sm" href="?{% if filter_qs %}{{ filter_qs }}&amp;{% endif %}page={{ page_obj.next_page_number }}">Next &rarr;</a>
+        {% endif %}
+      </div>
+    </nav>
+  {% endif %}
+{% endblock %}

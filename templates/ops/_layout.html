@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% comment %}
+  Ops UI layout (Settings, Dashboard, Browser — PLAN.md §8). Same token
+  chrome as docs but with the ops nav in the sidebar. Session-authed pages
+  only; mounted under the admin-panel prefix.
+
+  Pages extending this provide:
+    {% block page_title %} / {% block page_subtitle %} / {% block content %}
+{% endcomment %}
+{% load static %}
+
+{% block title %}{% block page_title_tag %}Ops{% endblock %} · {{ APP_NAME }}{% endblock %}
+
+{% block body %}
+<div x-data="{drawerOpen: false}" x-on:keydown.escape.window="drawerOpen = false" class="min-h-screen bg-surface-2 text-ink">
+  {% include "partials/_sidebar.html" with nav_sections=ops_nav_sections %}
+
+  <div class="lg:ps-64">
+    {# Mobile-only: it carries the drawer toggle; on lg+ content starts at the top. #}
+    {% include "partials/_topbar.html" with title=APP_NAME nav_links=ops_top_links show_drawer=True topbar_class="lg:hidden" %}
+
+    <main id="main-content" class="px-4 py-6 sm:px-6 lg:px-8 lg:py-8" role="main">
+      {# Pages override content_width when max-w-4xl is too tight. #}
+      <div class="mx-auto {% block content_width %}max-w-4xl{% endblock %}">
+        {# page_actions: status chips / actions on the title line. #}
+        <header class="mb-6 flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h1 class="page-title">
+              {% block page_title %}Ops{% endblock %}
+            </h1>
+            {% block page_subtitle %}{% endblock %}
+          </div>
+          {% block page_actions %}{% endblock %}
+        </header>
+
+        {% include "partials/_flash.html" %}
+
+        {% block content %}{% endblock %}
+      </div>
+    </main>
+  </div>
+
+  {# After the topbar in DOM order so equal z paints over it; sidebar is z-40. #}
+  <div x-show="drawerOpen" x-cloak x-on:click="drawerOpen = false"
+       class="scrim" aria-hidden="true"></div>
+
+  {% include "partials/_toast.html" %}
+</div>
+{% endblock %}

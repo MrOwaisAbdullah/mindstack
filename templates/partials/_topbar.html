@@ -1,0 +1,30 @@
+{% comment %}
+  Brain-server topbar — replaces the template's SaaS topbar (which linked
+  dashboard/account/i18n routes this app doesn't mount). Included by the
+  docs layout with: title, nav_links, show_drawer.
+{% endcomment %}
+{# topbar_class: layout extras — ops passes lg:hidden (sidebar is the chrome there). #}
+<header class="sticky top-0 z-30 border-b border-line bg-surface {{ topbar_class|default:'' }}" role="banner">
+  <div class="flex h-14 items-center gap-4 px-4 sm:px-6 lg:px-8">
+    {% if show_drawer %}
+      <button type="button" class="lg:hidden" aria-label="Open navigation"
+              x-on:click="drawerOpen = !drawerOpen">
+        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M4 6h16M4 12h16M4 18h16" />
+        </svg>
+      </button>
+    {% endif %}
+    {# lg:hidden — once the sidebar shows, it already carries the brand. #}
+    <a href="{{ brand_url|default:'/docs/' }}" class="flex items-center gap-2 font-display font-semibold text-ink lg:hidden">
+      {% include "partials/_brand_mark.html" with size="h-5 w-5" %}
+      {{ title|default:APP_NAME }}
+    </a>
+    <nav class="ms-auto flex items-center gap-4 text-sm">
+      {% for link in nav_links %}
+        <a href="{{ link.url }}" class="text-muted hover:text-ink">{{ link.label }}</a>
+      {% endfor %}
+      {# Ops hides this whole bar at lg, so the sidebar carries its own copy. #}
+      {% include "partials/_theme_toggle.html" %}
+    </nav>
+  </div>
+</header>

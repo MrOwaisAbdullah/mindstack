@@ -1,0 +1,44 @@
+{% comment %}
+  Brain-server sidebar — ops nav grouped by section.
+  Included with: nav_sections — [{label, items:[{label, url, active?}]}].
+  Parent layout's Alpine root owns `drawerOpen`.
+
+  `item.active` is honoured here; nav.py starts emitting it in M5.6.3.
+{% endcomment %}
+<aside class="fixed inset-y-0 start-0 z-40 w-64 overflow-y-auto border-e border-line bg-surface-2 transition-transform duration-200 lg:translate-x-0"
+       :class="drawerOpen ? 'translate-x-0' : '-translate-x-full'"
+       aria-label="Sidebar">
+  <div class="flex h-14 items-center gap-2 border-b border-line px-4 font-display font-semibold">
+    {# brand_url: the ops dashboard for staff, docs home for public readers. #}
+    <a href="{{ brand_url|default:'/docs/' }}" class="flex min-w-0 items-center gap-2">
+      {% include "partials/_brand_mark.html" with size="h-5 w-5" %}
+      <span class="truncate">{{ APP_NAME }}</span>
+    </a>
+    {% comment %}
+      The topbar is lg:hidden on ops, so on desktop this is the only
+      toggle on the page. -me-1 pulls it back to the padding edge.
+    {% endcomment %}
+    <span class="-me-1 ms-auto">{% include "partials/_theme_toggle.html" %}</span>
+  </div>
+  <nav class="px-3 pb-8">
+    {% for section in nav_sections %}
+      <div class="mt-6 first:mt-4">
+        <div class="px-2.5 text-xs font-medium uppercase tracking-wider text-muted">
+          {{ section.label }}
+        </div>
+        <ul class="mt-1.5 space-y-0.5">
+          {% for item in section.items %}
+            <li>
+              <a href="{{ item.url }}"
+                 class="nav-item{% if item.active %} nav-item-active{% endif %}"
+                 {% if item.active %}aria-current="page"{% endif %}>
+                {% if item.icon %}{% include "partials/_nav_icon.html" with name=item.icon %}{% endif %}
+                <span class="truncate">{{ item.label }}</span>
+              </a>
+            </li>
+          {% endfor %}
+        </ul>
+      </div>
+    {% endfor %}
+  </nav>
+</aside>

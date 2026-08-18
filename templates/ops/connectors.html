@@ -1,0 +1,247 @@
+{% extends "ops/_layout.html" %}
+{% comment %}
+  /ops/connectors/ — the URL-path MCP credentials, for claude.ai web and
+  mobile. Its own page rather than a tab on API keys, because the thing
+  being handled is different: a bearer key is a secret you hold, a
+  connector URL is a secret you paste into someone else's product.
+
+  One row per credential (apps.url_mcp_tokens.URLMCPToken) — tier and
+  expiry live on the row itself, so there is no second row to drift.
+
+  The mint result is a whole URL, not a token: the URL is what claude.ai's
+  dialog asks for, so that is what the copy button should hand over.
+
+  Badge language matches consumers.html: green = live, warn = needs a look,
+  ink = the private tier (protected, not broken). Red stays for problems.
+{% endcomment %}
+
+{% block page_title_tag %}Connectors{% endblock %}
+{% block page_title %}Connectors{% endblock %}
+{% block page_subtitle %}
+  <p class="page-subtitle">
+    {% if total %}
+      {{ active_count }} active of {{ total }} connector{{ total|pluralize }} — a URL
+      claude.ai can reach this brain with, because its dialog has nowhere to put a
+      key. The URL <em>is</em> the credential.
+    {% else %}
+      claude.ai&rsquo;s custom-connector dialog has nowhere to put an API key, so the
+      credential rides in the URL instead. Mint one below and paste it there.
+    {% endif %}
+  </p>
+{% endblock %}
+{% block content_width %}max-w-[1600px]{% endblock %}
+
+{% block page_actions %}
+  <div class="flex items-center gap-3 text-xs">
+    <a class="link-accent" href="{{ ops_base }}consumers/">API keys</a>
+    <a class="link-accent" href="/docs/guide/mcp-setup/">MCP setup</a>
+  </div>
+{% endblock %}
+
+{% block content %}
+
+  {% if not url_auth_enabled %}
+    <div class="notice notice-warn mb-6">
+      <div class="text-sm font-semibold">The URL surface is switched off</div>
+      <p class="mt-1 text-sm">
+        <code>MCP_URL_AUTH_ENABLED</code> is false, so <code>/mcp/k/&lt;token&gt;/</code>
+        answers 404 &mdash; not 401, so the address does not admit it exists. Tokens
+        minted here will authenticate against nothing until you set it and restart.
+        Off is the honest default: on means a live credential in your access log,
+        which is what the scrubbing below exists to contain.
+      </p>
+    </div>
+  {% endif %}
+
+  {% if new_secret %}
+    <div class="notice notice-ok mb-6" x-data="{copied: false}">
+      <div class="text-sm font-semibold">Connector URL for {{ new_secret.name }}</div>
+      <p class="mt-1 text-sm">
+        This is the only time it is shown &mdash; only its SHA-256 hash is stored, so a
+        refresh cannot bring it back. Paste it whole into claude.ai &rarr; Settings &rarr;
+        Connectors &rarr; Add custom connector.
+      </p>
+      <div class="mt-3 flex items-center gap-2">
+        {# field-input is w-full; the min-w-0 grow wrapper lets it shrink so Copy stays on the same line. #}
+        <div class="min-w-0 grow">
+          <input type="text" readonly x-ref="secret" value="{{ new_secret.url }}"
+                 class="field-input field-mono" />
+        </div>
+        <button type="button" class="btn btn-primary btn-sm shrink-0"
+                @click="navigator.clipboard.writeText($refs.secret.value).then(() => {copied = true; setTimeout(() => copied = false, 2000)})"
+                x-text="copied ? 'Copied' : 'Copy'">Copy</button>
+      </div>
+      <p class="mt-2 text-sm">
+        It reads at the <strong>{{ new_secret.tier }}</strong> tier. Anyone holding this
+        URL reads at that tier too, so treat it exactly like a password: no chat
+        messages, no tickets, no screenshots.
+      </p>
+    </div>
+  {% endif %}
+
+  <details class="card mb-6" {% if not total %}open{% endif %}>
+    <summary class="cursor-pointer select-none px-4 py-3">
+      <span class="card-title">Mint a connector URL</span>
+      <span class="ms-2 text-xs text-muted">shown once, stored as a hash, expires by default</span>
+    </summary>
+    <form method="post" class="grid gap-4 border-t border-line px-4 py-4">
+      {% csrf_token %}
+      <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <label class="field">
+          <span class="field-label">Name</span>
+          <input type="text" name="name" maxlength="120" required
+                 placeholder="claude-ai-mobile"
+                 class="field-input" />
+          <span class="field-hint">How you will recognise it when revoking one.</span>
+        </label>
+        <div x-data="{tier: 'agents-only'}">
+          <span class="field-label">Tier &mdash; the most it may read</span>
+          <select name="tier" x-model="tier" class="field-select">
+            {% for t in tiers %}
+              <option value="{{ t.value }}" {% if t.value == 'agents-only' %}selected{% endif %}>{{ t.value }}</option>
+            {% endfor %}
+          </select>
+          {% for t in tiers %}
+            <p class="field-hint" x-show="tier === '{{ t.value }}'" x-cloak>{{ t.help }}</p>
+          {% endfor %}
+        </div>
+        <label class="field">
+          <span class="field-label">Expires after</span>
+          <select name="ttl_days" class="field-select">
+            {% for days in ttl_choices %}
+              <option value="{{ days }}" {% if days == default_ttl_days %}selected{% endif %}>
+                {% if days %}{{ days }} days{% else %}never{% endif %}
+              </option>
+            {% endfor %}
+          </select>
+          <span class="field-hint">A URL you paste and forget should age out on its own.</span>
+        </label>
+        <label class="field">
+          <span class="field-label">Rate limit (requests/minute)</span>
+          <input type="number" name="rate_limit" value="{{ default_rate_limit }}"
+                 min="{{ min_rate_limit }}" max="{{ max_rate_limit }}"
+                 class="field-input" />
+          <span class="field-hint">Counted per connector, in 60-second windows.</span>
+        </label>
+      </div>
+      <div>
+        <button type="submit" name="action" value="create" class="btn-primary">
+          Mint connector URL
+        </button>
+      </div>
+    </form>
+  </details>
+
+  {% for row in rows %}
+    {# Bare x-data only to give the @submit confirms below an Alpine scope — #}
+    {# directives outside a component root are never initialised, and the #}
+    {# confirmation on Revoke would silently not appear. #}
+    <div class="card mb-3" x-data>
+      <div class="card-header flex-wrap">
+        <div class="flex min-w-0 flex-wrap items-center gap-2">
+          <span class="card-title min-w-0 truncate">{{ row.token.name }}</span>
+          {% if row.state == "active" %}
+            <span class="badge badge-ok">active</span>
+          {% elif row.state == "revoked" %}
+            <span class="badge badge-muted">revoked</span>
+          {% else %}
+            <span class="badge badge-warn">expired</span>
+          {% endif %}
+          {% if row.token.max_visibility == "private" %}
+            <span class="badge badge-ink" title="Reads everything, including private notes">{{ row.token.max_visibility }}</span>
+          {% elif row.token.max_visibility == "agents-only" %}
+            <span class="badge badge-info">{{ row.token.max_visibility }}</span>
+          {% else %}
+            <span class="badge badge-muted">{{ row.token.max_visibility }}</span>
+          {% endif %}
+        </div>
+
+        {% if row.state == "active" %}
+          <div class="flex shrink-0 flex-wrap gap-2">
+            <form method="post"
+                  @submit="if (!confirm('Rotate this connector? The current URL stops working immediately and the replacement is shown once — you will have to paste it into claude.ai.')) $event.preventDefault()">
+              {% csrf_token %}
+              <input type="hidden" name="token_id" value="{{ row.token.pk }}" />
+              <button type="submit" name="action" value="rotate" class="btn-ghost btn-sm">Rotate</button>
+            </form>
+            <form method="post"
+                  @submit="if (!confirm('Revoke this connector? That URL fails from now on. Your API keys are not affected.')) $event.preventDefault()">
+              {% csrf_token %}
+              <input type="hidden" name="token_id" value="{{ row.token.pk }}" />
+              <button type="submit" name="action" value="revoke" class="btn-danger-ghost btn-sm">Revoke</button>
+            </form>
+          </div>
+        {% endif %}
+      </div>
+
+      <div class="card-body">
+        <dl class="meta-grid lg:grid-cols-3 xl:grid-cols-4">
+          <div>
+            <dt class="meta-label">URL</dt>
+            <dd class="meta-value">{{ row.masked_url }}</dd>
+          </div>
+          <div>
+            <dt class="meta-label">Rate limit</dt>
+            <dd class="meta-value">{{ row.token.rate_limit_per_min }}/min</dd>
+          </div>
+          <div>
+            <dt class="meta-label">Expires</dt>
+            <dd class="meta-value">
+              {% if row.token.expires_at %}{{ row.token.expires_at|date:"Y-m-d H:i" }}{% else %}never{% endif %}
+            </dd>
+          </div>
+          <div>
+            <dt class="meta-label">Last used</dt>
+            <dd class="meta-value">
+              {% if row.token.last_used_at %}
+                {{ row.token.last_used_at|date:"Y-m-d H:i" }}{% if row.token.last_used_ip %} from {{ row.token.last_used_ip }}{% endif %}
+              {% else %}never{% endif %}
+            </dd>
+          </div>
+          <div>
+            <dt class="meta-label">Created</dt>
+            <dd class="meta-value">{{ row.token.created_at|date:"Y-m-d H:i" }}</dd>
+          </div>
+          {% if row.token.revoked_at %}
+            <div>
+              <dt class="meta-label">Revoked</dt>
+              <dd class="meta-value">{{ row.token.revoked_at|date:"Y-m-d H:i" }}</dd>
+            </div>
+          {% endif %}
+        </dl>
+        <p class="mt-3 text-sm text-muted">
+          In logs this appears as <code>{{ row.token.prefix }}***</code> &mdash; the same
+          prefix failed attempts are counted against, so a suspicious line here is
+          traceable to this row without the secret ever being written down.
+        </p>
+      </div>
+    </div>
+  {% empty %}
+    <div class="empty-state">
+      <h3 class="empty-state-title">No connectors yet</h3>
+      <p class="mt-1 max-w-md text-sm">
+        Claude Desktop and Claude Code send an API key in a header and belong on the
+        API keys page. This page is for claude.ai on web and mobile, whose connector
+        dialog has nowhere to put one &mdash; so the credential rides in the URL.
+      </p>
+    </div>
+  {% endfor %}
+
+  {% if page_obj.paginator.num_pages > 1 %}
+    <nav class="mt-4 flex flex-wrap items-center justify-between gap-3" aria-label="Pagination">
+      <span class="text-xs text-muted">
+        Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }} &middot;
+        showing {{ page_obj.start_index }}&ndash;{{ page_obj.end_index }} of {{ total }}
+      </span>
+      <div class="flex gap-2">
+        {% if page_obj.has_previous %}
+          <a class="btn-ghost btn-sm" href="?page={{ page_obj.previous_page_number }}">&larr; Previous</a>
+        {% endif %}
+        {% if page_obj.has_next %}
+          <a class="btn-ghost btn-sm" href="?page={{ page_obj.next_page_number }}">Next &rarr;</a>
+        {% endif %}
+      </div>
+    </nav>
+  {% endif %}
+
+{% endblock %}

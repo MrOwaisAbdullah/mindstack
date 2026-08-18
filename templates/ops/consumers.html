@@ -1,0 +1,268 @@
+{% extends "ops/_layout.html" %}
+{% comment %}
+  /ops/consumers/ — mint and manage the bearer keys that reach this brain
+  over REST and MCP.
+
+  Two rows per credential: the APIKey (apps.api_keys) and its Consumer
+  profile (apps.mind), which carries the tier and the rate limit. The
+  view goes through apps.mind.consumers so the two never drift apart.
+
+  Badge language here: green = live, warn = needs a look (expired, no
+  profile), ink = the private tier — protected, not broken. Red stays
+  reserved for problems, and a tier is never a problem.
+
+  The list is paginated at 50 (browser pattern): rotation revokes a row
+  every time it runs, so this list grows for the life of the install.
+{% endcomment %}
+
+{% block page_title_tag %}API keys{% endblock %}
+{% block page_title %}API keys{% endblock %}
+{% block page_subtitle %}
+  <p class="page-subtitle">
+    {% if total %}
+      {{ active_count }} active of {{ total }} key{{ total|pluralize }} — every REST and MCP
+      call presents one. There is no anonymous tier; a key is how anything reads this brain.
+    {% else %}
+      Every REST and MCP call presents a key — there is no anonymous tier.
+      Nothing can read this brain until you mint one below.
+    {% endif %}
+  </p>
+{% endblock %}
+{% block content_width %}max-w-[1600px]{% endblock %}
+
+{% block page_actions %}
+  <div class="flex items-center gap-3 text-xs">
+    <a class="link-accent" href="/docs/guide/auth/">Auth guide</a>
+    <a class="link-accent" href="/docs/guide/mcp-setup/">MCP setup</a>
+  </div>
+{% endblock %}
+
+{% block content %}
+
+  {% if new_secret %}
+    <div class="notice notice-ok mb-6" x-data="{copied: false}">
+      <div class="text-sm font-semibold">Your new key for {{ new_secret.name }}</div>
+      <p class="mt-1 text-sm">
+        This is the only time it is shown. Only its SHA-256 hash is stored, so
+        a refresh cannot bring it back — copy it now, or rotate the key later.
+      </p>
+      <div class="mt-3 flex items-center gap-2">
+        {# field-input is w-full; the min-w-0 grow wrapper lets it shrink so Copy stays on the same line. #}
+        <div class="min-w-0 grow">
+          <input type="text" readonly x-ref="secret" value="{{ new_secret.secret }}"
+                 class="field-input field-mono" />
+        </div>
+        <button type="button" class="btn btn-primary btn-sm shrink-0"
+                @click="navigator.clipboard.writeText($refs.secret.value).then(() => {copied = true; setTimeout(() => copied = false, 2000)})"
+                x-text="copied ? 'Copied' : 'Copy'">Copy</button>
+      </div>
+      <dl class="meta-grid mt-4">
+        <div>
+          <dt class="meta-label">REST</dt>
+          <dd class="meta-value">{{ api_base }}&lt;endpoint&gt;</dd>
+        </div>
+        <div>
+          <dt class="meta-label">MCP</dt>
+          <dd class="meta-value">{{ mcp_url }}</dd>
+        </div>
+      </dl>
+      <p class="mt-2 text-sm">
+        Send it as <code>Authorization: Bearer &lt;key&gt;</code> —
+        <a class="link-accent" href="/docs/guide/auth/">auth guide</a> ·
+        <a class="link-accent" href="/docs/guide/mcp-setup/">MCP setup</a>
+      </p>
+    </div>
+  {% endif %}
+
+  <details class="card mb-6" {% if not total %}open{% endif %}>
+    <summary class="cursor-pointer select-none px-4 py-3">
+      <span class="card-title">Mint a key</span>
+      <span class="ms-2 text-xs text-muted">the secret is shown once and stored as a hash</span>
+    </summary>
+    <form method="post" class="grid gap-4 border-t border-line px-4 py-4">
+      {% csrf_token %}
+      <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <label class="field">
+          <span class="field-label">Name</span>
+          <input type="text" name="name" maxlength="120" required
+                 placeholder="claude-desktop"
+                 class="field-input" />
+          <span class="field-hint">How you will recognise it when revoking one.</span>
+        </label>
+        <div x-data="{tier: 'agents-only'}">
+          <span class="field-label">Tier — the most it may read</span>
+          <select name="tier" x-model="tier" class="field-select">
+            {% for t in tiers %}
+              <option value="{{ t.value }}" {% if t.value == 'agents-only' %}selected{% endif %}>{{ t.value }}</option>
+            {% endfor %}
+          </select>
+          {% for t in tiers %}
+            <p class="field-hint" x-show="tier === '{{ t.value }}'" x-cloak>{{ t.help }}</p>
+          {% endfor %}
+        </div>
+        <label class="field">
+          <span class="field-label">Rate limit (requests/minute)</span>
+          <input type="number" name="rate_limit" value="{{ default_rate_limit }}"
+                 min="{{ min_rate_limit }}" max="{{ max_rate_limit }}"
+                 class="field-input" />
+          <span class="field-hint">Per key, counted in 60-second windows.</span>
+        </label>
+        <label class="field">
+          <span class="field-label">Note (optional)</span>
+          <input type="text" name="note" maxlength="200"
+                 placeholder="laptop, replaced 2026-07"
+                 class="field-input" />
+        </label>
+      </div>
+      <div>
+        <button type="submit" name="action" value="create" class="btn-primary">
+          Mint key
+        </button>
+      </div>
+    </form>
+  </details>
+
+  {% for row in rows %}
+    <div class="card mb-3" x-data="{editing: false}">
+      <div class="card-header flex-wrap">
+        <div class="flex min-w-0 flex-wrap items-center gap-2">
+          <span class="card-title min-w-0 truncate">{{ row.key.name }}</span>
+          {% if row.state == "active" %}
+            <span class="badge badge-ok">active</span>
+          {% elif row.state == "revoked" %}
+            <span class="badge badge-muted">revoked</span>
+          {% else %}
+            <span class="badge badge-warn">expired</span>
+          {% endif %}
+          {% if row.tier == "private" %}
+            <span class="badge badge-ink" title="Reads everything, including private notes">{{ row.tier }}</span>
+          {% elif row.tier == "agents-only" %}
+            <span class="badge badge-info">{{ row.tier }}</span>
+          {% else %}
+            <span class="badge badge-muted">{{ row.tier }}</span>
+          {% endif %}
+          {% if row.unprofiled %}
+            <span class="badge badge-warn" title="No Consumer profile — defaulted to public">no profile</span>
+          {% endif %}
+        </div>
+
+        {% if row.state == "active" %}
+          <div class="flex shrink-0 flex-wrap gap-2">
+            <button type="button" class="btn-ghost btn-sm"
+                    @click="editing = !editing"
+                    x-text="editing ? 'Cancel' : 'Edit'">Edit</button>
+            <form method="post"
+                  @submit="if (!confirm('Rotate this key? The current one stops working immediately and the replacement is shown once.')) $event.preventDefault()">
+              {% csrf_token %}
+              <input type="hidden" name="key_id" value="{{ row.key.pk }}" />
+              <button type="submit" name="action" value="rotate" class="btn-ghost btn-sm">Rotate</button>
+            </form>
+            <form method="post"
+                  @submit="if (!confirm('Revoke this key? Every call using it fails from now on.')) $event.preventDefault()">
+              {% csrf_token %}
+              <input type="hidden" name="key_id" value="{{ row.key.pk }}" />
+              <button type="submit" name="action" value="revoke" class="btn-danger-ghost btn-sm">Revoke</button>
+            </form>
+          </div>
+        {% endif %}
+      </div>
+
+      <div class="card-body">
+        <dl class="meta-grid lg:grid-cols-3 xl:grid-cols-4">
+          <div>
+            <dt class="meta-label">Key</dt>
+            <dd class="meta-value">{{ row.key.prefix }}…{{ row.key.last_4 }}</dd>
+          </div>
+          <div>
+            <dt class="meta-label">Rate limit</dt>
+            <dd class="meta-value">{{ row.rate_limit }}/min</dd>
+          </div>
+          <div>
+            <dt class="meta-label">Reads (7d)</dt>
+            <dd class="meta-value">{{ row.reads }}</dd>
+          </div>
+          <div>
+            <dt class="meta-label">Last used</dt>
+            <dd class="meta-value">
+              {% if row.last_used %}
+                {{ row.last_used|date:"Y-m-d H:i" }}{% if row.key.last_used_ip %} from {{ row.key.last_used_ip }}{% endif %}
+              {% else %}never{% endif %}
+            </dd>
+          </div>
+          <div>
+            <dt class="meta-label">Created</dt>
+            <dd class="meta-value">{{ row.key.created_at|date:"Y-m-d H:i" }}</dd>
+          </div>
+          {% if row.key.revoked_at %}
+            <div>
+              <dt class="meta-label">Revoked</dt>
+              <dd class="meta-value">{{ row.key.revoked_at|date:"Y-m-d H:i" }}</dd>
+            </div>
+          {% endif %}
+        </dl>
+        {% if row.note %}
+          <p class="mt-3 text-sm text-muted">{{ row.note }}</p>
+        {% endif %}
+      </div>
+
+      {% if row.state == "active" %}
+        <form method="post" class="card-footer grid gap-4" x-show="editing" x-cloak>
+          {% csrf_token %}
+          <input type="hidden" name="key_id" value="{{ row.key.pk }}" />
+          <div class="grid gap-4 sm:grid-cols-3">
+            <label class="field">
+              <span class="field-label">Tier</span>
+              <select name="tier" class="field-select">
+                {% for t in tiers %}
+                  <option value="{{ t.value }}" {% if t.value == row.tier %}selected{% endif %}>{{ t.value }}</option>
+                {% endfor %}
+              </select>
+            </label>
+            <label class="field">
+              <span class="field-label">Rate limit</span>
+              <input type="number" name="rate_limit" value="{{ row.rate_limit }}"
+                     min="{{ min_rate_limit }}" max="{{ max_rate_limit }}"
+                     class="field-input" />
+            </label>
+            <label class="field">
+              <span class="field-label">Note</span>
+              <input type="text" name="note" maxlength="200" value="{{ row.note }}"
+                     class="field-input" />
+            </label>
+          </div>
+          <div class="flex flex-wrap items-center gap-3">
+            <button type="submit" name="action" value="update" class="btn-primary btn-sm">Save</button>
+            <span class="text-xs text-muted">Takes effect on the next call — nothing is cached.</span>
+          </div>
+        </form>
+      {% endif %}
+    </div>
+  {% empty %}
+    <div class="empty-state">
+      <h3 class="empty-state-title">No keys yet</h3>
+      <p class="mt-1 max-w-md text-sm">
+        Nothing can read this brain until you mint one — every REST and MCP
+        call is authenticated. Use the Mint a key form above; the secret is
+        shown exactly once.
+      </p>
+    </div>
+  {% endfor %}
+
+  {% if page_obj.paginator.num_pages > 1 %}
+    <nav class="mt-4 flex flex-wrap items-center justify-between gap-3" aria-label="Pagination">
+      <span class="text-xs text-muted">
+        Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }} ·
+        showing {{ page_obj.start_index }}&ndash;{{ page_obj.end_index }} of {{ total }}
+      </span>
+      <div class="flex gap-2">
+        {% if page_obj.has_previous %}
+          <a class="btn-ghost btn-sm" href="?page={{ page_obj.previous_page_number }}">&larr; Previous</a>
+        {% endif %}
+        {% if page_obj.has_next %}
+          <a class="btn-ghost btn-sm" href="?page={{ page_obj.next_page_number }}">Next &rarr;</a>
+        {% endif %}
+      </div>
+    </nav>
+  {% endif %}
+
+{% endblock %}

@@ -1,0 +1,93 @@
+# Local full-stack override — driven by `dev.ps1`, never by Coolify.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.local.yml up -d
+#
+# What it changes versus the deployed stack (docker-compose.yml):
+#   - config.settings.docker — DEBUG + autoreload, still Postgres + Redis
+#     so local behaviour matches the VPS.
+#   - the repo is bind-mounted at /app: an edit lands without a rebuild.
+#     web self-reloads (uvicorn --reload, polling — real SSE, prod-same
+#     server); mcp + worker don't, hence `dev.ps1 reload`.
+#   - data/brain-repo + data/brain-views + data/state are bind-mounted from
+#     the host instead of named volumes, so the stack reuses the clone you
+#     already have and needs no git credential to boot, and any generated
+#     boot secret survives `dev.ps1 rebuild` (and is inspectable on the host).
+#   - fixed host ports, and `restart: no` so a crash stops instead of
+#     looping in the background.
+
+x-local: &local
+  restart: "no"
+  environment: &local-env
+    DJANGO_SETTINGS_MODULE: config.settings.docker
+    # Cross-container MCP auth (the peer-IP fallback only trusts
+    # loopback, and web -> mcp arrives from a bridge IP). Local value —
+    # the deployed one comes from Coolify.
+    MCP_LOOPBACK_SECRET: local-dev-mcp-secret
+    # The bind-mounted clone is owned by another uid inside the
+    # container; without this git refuses it as "dubious ownership".
+    # Env-only form of `git config --global safe.directory '*'`.
+    GIT_CONFIG_COUNT: "1"
+    GIT_CONFIG_KEY_0: safe.directory
+    GIT_CONFIG_VALUE_0: "*"
+  volumes:
+    - .:/app
+    - ./data/brain-repo:/data/brain-repo
+    - ./data/brain-views:/data/brain-views
+    - ./data/state:/data/state
+
+services:
+  web:
+    <<: *local
+    # entrypoint role: migrate + brain_bootstrap + uvicorn --reload.
+    command: [dev]
+    ports: !override
+      - "8000:8000"
+    environment:
+      <<: *local-env
+      MCP_LOOPBACK_HOST: mcp
+
+  mcp:
+    <<: *local
+    environment:
+      <<: *local-env
+      MCP_LOOPBACK_HOST: 0.0.0.0
+    # 9002 on the host, not 9001: a host-run `python -m apps.core.mcp.server`
+    # already owns 9001 and the port clash would fail `up`.
+    ports:
+      - "9002:9001"
+    # web owns migrate; mcp and worker must not race an unmigrated DB.
+    depends_on:
+      web:
+        condition: service_healthy
+
+  worker:
+    <<: *local
+    environment:
+      <<: *local-env
+      MCP_LOOPBACK_HOST: mcp
+      # Write credential for the approval push (M2.5) — worker ONLY
+      # (grill C13), file-mounted rather than .env because .env feeds
+      # all three app containers. Empty placeholder file = no PAT; the
+      # push then falls back to plain `origin` and fails cleanly.
+      BRAIN_GIT_WRITE_PAT_PATH: /run/secrets/brain_write_pat
+    # An explicit `volumes:` replaces the anchor's list — repeat it.
+    volumes:
+      - .:/app
+      - ./data/brain-repo:/data/brain-repo
+      - ./data/brain-views:/data/brain-views
+      - ./data/state:/data/state
+      - ./secrets/brain_write_pat:/run/secrets/brain_write_pat:ro
+    depends_on:
+      web:
+        condition: service_healthy
+
+  postgres:
+    restart: "no"
+    # 5433 so a Postgres already installed on the host keeps 5432.
+    ports:
+      - "5433:5432"
+
+  redis:
+    restart: "no"
+    ports:
+      - "6380:6379"

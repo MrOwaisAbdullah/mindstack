@@ -1,0 +1,137 @@
+/* ============================================================
+   M3.5.3 — graph explorer chrome. The graph itself is a canvas
+   Cytoscape owns; these are the controls, tooltip and legend around it.
+   ============================================================ */
+
+.gx {
+  position: relative;
+}
+
+.gx-canvas {
+  width: 100%;
+  /* Grows with the viewport now the page is full-width; never so tall
+     the toolbar scrolls away, never letterboxed on a laptop. */
+  height: clamp(440px, 66vh, 780px);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+}
+
+/* Reserve the caption's line even when empty. Otherwise picking a lens
+   grows the toolbar, which shrinks the canvas, which makes the whole
+   graph jump under the cursor at the exact moment you're aiming at it.
+   (The toolbar chrome itself is card + field-select + btn-ghost —
+   shared components, not gx-specific styles.) */
+.gx-scope {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.4;
+  min-height: 1.4em;
+  color: var(--accent-strong);
+}
+.gx-status {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.gx-tip {
+  position: absolute;
+  z-index: 20;
+  top: 0;
+  left: 0;
+  min-width: 170px;
+  max-width: 300px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+  font-size: 12px;
+  line-height: 1.45;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.1s ease;
+}
+.gx-tip.is-on {
+  opacity: 1;
+}
+.gx-tip-title {
+  font-weight: 600;
+  color: var(--ink);
+}
+.gx-tip-meta {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.gx-key {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  align-items: center;
+  font-size: 12px;
+  color: var(--muted);
+}
+/* M3.5.4 — live read ticker */
+.gx-ticker {
+  margin-top: 10px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--muted);
+}
+.gx-ticker-head {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.gx-live {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--signal, #4db8a8);
+  animation: gx-blink 2.4s ease-in-out infinite;
+}
+@keyframes gx-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.25; }
+}
+.gx-tick {
+  padding-top: 2px;
+  overflow-wrap: anywhere;
+}
+
+.gx-key-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.gx-swatch {
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  display: inline-block;
+  background: var(--kind-color, var(--muted));
+}
+.gx-key-n {
+  font-family: var(--font-mono);
+  color: var(--ink);
+}
+
+.gx-edge-swatch {
+  width: 18px;
+  height: 0;
+  border-top-width: 2px;
+  border-top-style: solid;
+  display: inline-block;
+}
+/* Same tokens the canvas edges are painted from (explorer.js
+   edgePalette) — the key never lies about the picture. */
+.gx-edge-topic { border-top-color: var(--line); }
+.gx-edge-project { border-top-color: var(--viz-project); }
+.gx-edge-source { border-top-color: var(--accent-2); border-top-style: dashed; }
+.gx-edge-superseded { border-top-color: var(--danger-ink); }

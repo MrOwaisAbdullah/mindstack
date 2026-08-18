@@ -1,0 +1,120 @@
+{% load ui i18n %}{% comment %}
+  reusable HTMX-driven data table.
+  See `templates/components/data_table.md` (or the session log)
+  for parameter docs. Multi-line {% comment %} block is required —
+  Django's {# #} is single-line only and would leak template syntax.
+{% endcomment %}
+<div id="{{ id }}" class="space-y-3">
+  {% if search_url %}
+    <div class="flex flex-wrap items-center gap-2">
+      <label class="relative flex-1 min-w-[14rem]">
+        <span class="sr-only">{% trans "Search" %}</span>
+        <span class="absolute inset-y-0 start-3 flex items-center text-zinc-400" aria-hidden="true">
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+        </span>
+        <input
+          type="search"
+          name="q"
+          value="{{ search_query|default:'' }}"
+          placeholder="{% trans 'Search…' %}"
+          hx-get="{{ search_url }}"
+          hx-trigger="input changed delay:300ms, search"
+          hx-target="#{{ id }}"
+          hx-swap="outerHTML"
+          hx-include="closest div"
+          class="w-full rounded-md border border-zinc-300 bg-white py-1.5 ps-9 pe-3 text-sm text-zinc-900 placeholder-zinc-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
+        />
+      </label>
+      {% if bulk_actions %}
+        <div class="flex flex-wrap items-center gap-1">
+          {% for ba in bulk_actions %}
+            <button
+              type="submit"
+              form="{{ id }}-bulk-form"
+              formaction="{{ ba.action_url }}"
+              formmethod="post"
+              class="btn btn-secondary text-xs{% if ba.variant == 'danger' %} text-rose-600 dark:text-rose-400{% endif %}"
+            >{{ ba.label }}</button>
+          {% endfor %}
+        </div>
+      {% endif %}
+    </div>
+  {% endif %}
+
+  {% if rows or rows_html %}
+    <form id="{{ id }}-bulk-form" method="post">
+      {% csrf_token %}
+      <div class="overflow-x-auto rounded-xl border border-zinc-200 dark:border-zinc-800">
+        <table class="w-full text-sm">
+          <thead class="bg-zinc-50 text-start text-xs uppercase tracking-wide text-zinc-500 dark:bg-zinc-900 dark:text-zinc-400">
+            <tr>
+              {% if bulk_actions %}
+                <th class="w-10 px-4 py-2">
+                  <input type="checkbox" aria-label="{% trans 'Select all' %}" class="rounded border-zinc-300 dark:border-zinc-700 dark:bg-zinc-800" x-data x-on:change="$root.querySelectorAll('input[name=ids]').forEach(c => c.checked = $event.target.checked)" />
+                </th>
+              {% endif %}
+              {% for col in columns %}
+                <th class="px-4 py-2 font-medium {% if col.align == 'right' %}text-end{% elif col.align == 'center' %}text-center{% endif %}">
+                  {% if col.sortable and search_url %}
+                    {% with new_dir=col.key|stringformat:'s' %}
+                      <a
+                        hx-get="{{ search_url }}?sort={{ col.key }}&dir={% if current_sort == col.key and current_dir == 'asc' %}desc{% else %}asc{% endif %}{% if search_query %}&q={{ search_query|urlencode }}{% endif %}"
+                        hx-target="#{{ id }}"
+                        hx-swap="outerHTML"
+                        href="?sort={{ col.key }}&dir={% if current_sort == col.key and current_dir == 'asc' %}desc{% else %}asc{% endif %}{% if search_query %}&q={{ search_query|urlencode }}{% endif %}"
+                        class="inline-flex items-center gap-1 hover:text-zinc-900 dark:hover:text-zinc-100"
+                      >
+                        {{ col.label }}
+                        {% if current_sort == col.key %}
+                          <span aria-hidden="true">{% if current_dir == 'asc' %}↑{% else %}↓{% endif %}</span>
+                        {% endif %}
+                      </a>
+                    {% endwith %}
+                  {% else %}
+                    {{ col.label }}
+                  {% endif %}
+                </th>
+              {% endfor %}
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-zinc-200 bg-white dark:divide-zinc-800 dark:bg-zinc-950">
+            {% if rows_html %}
+              {{ rows_html }}
+            {% else %}
+              {% for row in rows %}
+                <tr class="hover:bg-zinc-50 dark:hover:bg-zinc-900/40">
+                  {% if bulk_actions %}
+                    <td class="w-10 px-4 py-2">
+                      <input type="checkbox" name="ids" value="{{ row.id }}" aria-label="{% trans 'Select row' %}" class="rounded border-zinc-300 dark:border-zinc-700 dark:bg-zinc-800" />
+                    </td>
+                  {% endif %}
+                  {% for col in columns %}
+                    <td class="px-4 py-3 {% if col.align == 'right' %}text-end{% elif col.align == 'center' %}text-center{% endif %} text-zinc-700 dark:text-zinc-200">
+                      {{ row|dictlookup:col.key|default_if_none:"—" }}
+                    </td>
+                  {% endfor %}
+                </tr>
+              {% endfor %}
+            {% endif %}
+          </tbody>
+        </table>
+      </div>
+    </form>
+
+    {% if pages %}
+      <div class="flex items-center justify-between text-xs text-zinc-500 dark:text-zinc-400">
+        <span>{% blocktrans with start=pages.start_idx end=pages.end_idx total=pages.total %}Showing {{ start }}–{{ end }} of {{ total }}{% endblocktrans %}</span>
+        <div class="flex gap-1">
+          {% if pages.has_prev %}
+            <a hx-get="{{ search_url }}?page={{ pages.prev_page }}{% if current_sort %}&sort={{ current_sort }}&dir={{ current_dir }}{% endif %}{% if search_query %}&q={{ search_query|urlencode }}{% endif %}" hx-target="#{{ id }}" hx-swap="outerHTML" href="?page={{ pages.prev_page }}" class="btn btn-secondary text-xs">{% trans "Previous" %}</a>
+          {% endif %}
+          {% if pages.has_next %}
+            <a hx-get="{{ search_url }}?page={{ pages.next_page }}{% if current_sort %}&sort={{ current_sort }}&dir={{ current_dir }}{% endif %}{% if search_query %}&q={{ search_query|urlencode }}{% endif %}" hx-target="#{{ id }}" hx-swap="outerHTML" href="?page={{ pages.next_page }}" class="btn btn-secondary text-xs">{% trans "Next" %}</a>
+          {% endif %}
+        </div>
+      </div>
+    {% endif %}
+  {% else %}
+    {% include "partials/_empty_state.html" with title=empty_title|default:_("No results") body=empty_body cta_label=empty_cta_label cta_url=empty_cta_url icon=empty_icon|default:"table" %}
+  {% endif %}
+</div>

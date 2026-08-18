@@ -1,0 +1,170 @@
+# Coolify compose resource for the brain server (PLAN.md §10, M1.11).
+#
+# Only `web` is exposed (Coolify's proxy terminates TLS and routes the
+# public domain to it). The ops UI lives under ADMIN_PANEL_URL_PATH on
+# the same app but MUST additionally sit behind Tailscale / Cloudflare
+# Access + ADMIN_IP_ALLOWLIST — see docs/DEPLOY.md.
+#
+# Volumes (named, so a Coolify redeploy never wipes them):
+#   brain-repo   — the server's git clone (single source of truth mirror)
+#   brain-views  — per-tier materialized snapshots
+#   brain-state  — secrets the app generates on first boot (SECRET_KEY,
+#                  FIELD_ENCRYPTION_KEY, …). Tiny, and the ONE volume whose
+#                  loss is unrecoverable-by-rebuild: without the encryption
+#                  key every stored credential becomes unreadable. Back it
+#                  up with the database.
+#   pgdata       — Postgres (Feeds/Events/SdkOperations are NOT rebuildable)
+# All three brain volumes mount into EVERY container that touches brain
+# code — web, mcp, worker (grill A5); the generated secrets in particular
+# must be identical across the three.
+
+x-app: &app
+  build: .
+  restart: unless-stopped
+  # PID 1 in these containers is python (gunicorn / qcluster), which does
+  # not reap orphans. The Claude CLI the worker spawns would accumulate as
+  # zombies over long uptimes without an init.
+  init: true
+  # Docker SIGKILLs 10s after SIGTERM by default, which is shorter than
+  # web's 30s graceful drain and far shorter than a worker mid-SDK-run.
+  # A killed worker's task is redelivered and runs (and bills) twice.
+  stop_grace_period: 60s
+  env_file:
+    - path: .env
+      required: false  # Coolify injects env directly; a file is optional
+  environment: &app-env
+    DJANGO_SETTINGS_MODULE: config.settings.prod
+    DATABASE_URL: postgres://brain:${POSTGRES_PASSWORD:?set in Coolify}@postgres:5432/brain
+    REDIS_URL: redis://redis:6379/0
+    BRAIN_REPO_DIR: /data/brain-repo
+    BRAIN_VIEWS_DIR: /data/brain-views
+    BRAIN_STATE_DIR: /data/state
+    BRAIN_GIT_SSH_KEY_PATH: /run/secrets/brain_deploy_key
+  volumes:
+    - brain-repo:/data/brain-repo
+    - brain-views:/data/brain-views
+    - brain-state:/data/state
+    # Read-only deploy key (clone/pull path). The WRITE credential (PAT)
+    # is env-injected into the worker ONLY, at M2 (grill C13).
+    - ${BRAIN_DEPLOY_KEY_FILE:-./secrets/brain_deploy_key}:/run/secrets/brain_deploy_key:ro
+  depends_on:
+    postgres:
+      condition: service_healthy
+    # service_healthy, not service_started: config/cache.py probes Redis
+    # ONCE at boot and the choice is permanent for that process. A worker
+    # that starts while redis is still initialising falls back to
+    # LocMemCache for its whole life — so it throttles in private memory
+    # and never sees the cache-bust that key revocation fires.
+    redis:
+      condition: service_healthy
+
+services:
+  web:
+    <<: *app
+    command: [web]
+    environment:
+      <<: *app-env
+      # The /mcp proxy targets the mcp container over the compose network;
+      # the shared secret authenticates non-loopback callers.
+      MCP_LOOPBACK_HOST: mcp
+    # `expose`, NOT `ports`. A bare `ports: ["8000"]` publishes to a random
+    # host port on 0.0.0.0 — reachable by anyone who scans the host, over
+    # plain HTTP, bypassing the proxy's TLS and whatever sits in front of
+    # /ops/ and /setup/. The proxy reaches this over the compose network.
+    # To reach it directly for local debugging, bind it explicitly and to
+    # loopback only: `ports: ["127.0.0.1:8000:8000"]`.
+    expose:
+      - "8000"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      # First boot runs migrate + collectstatic before serving; on slow or
+      # ARM hosts that exceeds 3×30s and the deploy is marked failed.
+      start_period: 180s
+
+  # web owns migrate (see docker/entrypoint.sh); mcp and worker must not
+  # race an unmigrated DB on first boot. Without this they start against an
+  # empty schema and crash-loop until web catches up — it self-heals via
+  # `restart`, but a stranger's first-boot logs look like a broken product.
+  mcp:
+    <<: *app
+    command: [mcp]
+    environment:
+      <<: *app-env
+      MCP_LOOPBACK_HOST: 0.0.0.0   # bind for cross-container traffic
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      web:
+        condition: service_healthy
+
+  worker:
+    <<: *app
+    command: [worker]
+    environment:
+      <<: *app-env
+      MCP_LOOPBACK_HOST: mcp
+      # The write credential is mounted into the worker ONLY — the worker
+      # is the only container that pushes. `.env.example` documented this
+      # split but the mount was missing here, so following the docs set a
+      # path nothing provided and pushes silently fell back to the DB-stored
+      # credential. Leave BRAIN_GIT_WRITE_PAT_FILE unset to skip the mount
+      # and manage the PAT through /ops/settings/ instead.
+      BRAIN_GIT_WRITE_PAT_PATH: /run/secrets/brain_write_pat
+    volumes:
+      - brain-repo:/data/brain-repo
+      - brain-views:/data/brain-views
+      - brain-state:/data/state
+      - ${BRAIN_DEPLOY_KEY_FILE:-./secrets/brain_deploy_key}:/run/secrets/brain_deploy_key:ro
+      - ${BRAIN_GIT_WRITE_PAT_FILE:-./secrets/brain_write_pat}:/run/secrets/brain_write_pat:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      web:
+        condition: service_healthy
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: brain
+      POSTGRES_USER: brain
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set in Coolify}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U brain -d brain"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    # noeviction, NOT allkeys-lru: this Redis is the django-q2 broker as
+    # well as the cache. Under memory pressure allkeys-lru evicts ANY key,
+    # including the task queue — enqueued feed approvals and extractions
+    # would vanish with no error and nothing on /ops/tasks/. Losing a cache
+    # entry is free; losing a queued approval is not. With noeviction a
+    # full Redis fails writes loudly instead.
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "256mb", "--maxmemory-policy", "noeviction"]
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  brain-repo:
+  brain-views:
+  brain-state:
+  pgdata:
+  redisdata:

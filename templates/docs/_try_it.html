@@ -1,0 +1,224 @@
+{% load i18n %}
+{% comment %}
+  Try-it panel.
+
+  Per locked design choice 1(a): authed users only. Anonymous viewers
+  see a Sign-in CTA in place of the form.
+
+  The form renders one input per top-level Pydantic field. Field type
+  → control mapping (`SchemaField.input_kind`):
+    text     → <input type="text">
+    number   → <input type="number">
+    boolean  → <input type="checkbox">
+    select   → <select> from enum values
+    json     → <textarea> for hand-written JSON (arrays, nested
+               objects, unions — anything past primitives)
+
+  Submission: Alpine `submit()` builds the payload (parsing JSON
+  textareas inline), POSTs to /api/<version>/<slug> with the user's
+  bearer token (pasted into the API key field — secrets are hashed
+  at rest so we can't auto-inject; same constraint as the curl tab).
+  Response is rendered with status pill + pretty-printed JSON.
+
+  Parameters:
+    spec    — apps.core.registry.EndpointSpec
+    bundle  — apps.docs.services.endpoint_detail.EndpointDetailBundle
+{% endcomment %}
+{% load security_tags %}
+<section class="mt-8">
+  <h2 class="text-base font-semibold text-zinc-900 dark:text-zinc-50">Try it</h2>
+  <p class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+    Fires a real <code class="text-[11px]">POST /api/{{ spec.version }}/{{ spec.slug }}</code> from your browser, against your own brain.
+  </p>
+
+  {% if bundle.is_anonymous %}
+    <div class="mt-3 rounded-xl border border-brand-200 bg-brand-50 p-6 text-center dark:border-brand-900 dark:bg-brand-950/40">
+      <p class="text-sm text-brand-900 dark:text-brand-200">
+        Paste a consumer API key to use Try it. Mint one under <a class="underline" href="{% url 'brainconfig:consumers' %}">API keys</a>.
+      </p>
+    </div>
+  {% else %}
+    {# Sample input emitted as a sibling <script type="application/json"> #}
+    {# block (Django's json_script filter renders the full element).      #}
+    {# `tryItPanel()` below reads it via getElementById('data-tryit-sample').  #}
+    {# Must live OUTSIDE the x-data attribute — inlining an HTML element  #}
+    {# into an attribute breaks the Alpine init and leaves every binding  #}
+    {# (apiKey / payload / loading / response / error) undefined.         #}
+    {{ bundle.sample_input_dict|json_script:"data-tryit-sample" }}
+    <div
+      x-data="tryItPanel({
+        url: '/api/{{ spec.version }}/{{ spec.slug }}',
+        method: '{{ spec.method }}'
+      })"
+      class="mt-3 rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-950"
+    >
+      {# API key field — pasted by the user (hashed at rest, can't auto-fill) #}
+      <label class="block text-xs font-medium text-zinc-700 dark:text-zinc-300">
+        API key
+        <input
+          type="password"
+          x-model="apiKey"
+          placeholder="mcpsk_..."
+          autocomplete="off"
+          class="mt-1 block w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 font-mono text-xs text-zinc-900 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-brand-500 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
+        />
+        <span class="mt-1 block text-[10px] text-zinc-500 dark:text-zinc-400">
+          Paste a consumer key. We don't store it — it stays in this tab.
+        </span>
+      </label>
+
+      {# One input per top-level field. Field type → control. #}
+      {% if bundle.input_fields %}
+        <div class="mt-4 grid gap-3">
+          {% for f in bundle.input_fields %}
+            <label class="block text-xs font-medium text-zinc-700 dark:text-zinc-300">
+              <span class="flex items-center gap-2">
+                <code class="font-mono text-[11px] text-zinc-900 dark:text-zinc-100">{{ f.name }}</code>
+                <span class="font-mono text-[10px] text-zinc-500 dark:text-zinc-400">{{ f.type_label }}</span>
+                {% if f.required %}
+                  <span class="inline-flex items-center rounded-full bg-rose-100 px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wider text-rose-700 dark:bg-rose-950 dark:text-rose-400">required</span>
+                {% endif %}
+              </span>
+              {% if f.input_kind == "text" %}
+                <input
+                  type="text"
+                  x-model="payload['{{ f.name|escapejs }}']"
+                  class="mt-1 block w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-brand-500 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
+                />
+              {% elif f.input_kind == "number" %}
+                <input
+                  type="number"
+                  x-model.number="payload['{{ f.name|escapejs }}']"
+                  class="mt-1 block w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-brand-500 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
+                />
+              {% elif f.input_kind == "boolean" %}
+                <input
+                  type="checkbox"
+                  x-model="payload['{{ f.name|escapejs }}']"
+                  class="mt-1 rounded border-zinc-300 text-brand-600 focus:ring-brand-500 dark:border-zinc-700 dark:bg-zinc-900"
+                />
+              {% elif f.input_kind == "select" %}
+                <select
+                  x-model="payload['{{ f.name|escapejs }}']"
+                  class="mt-1 block w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 focus:outline-none focus:ring-2 focus:ring-brand-500 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
+                >
+                  {% for opt in f.enum %}
+                    <option value="{{ opt }}">{{ opt }}</option>
+                  {% endfor %}
+                </select>
+              {% else %}
+                <textarea
+                  x-model="jsonInputs['{{ f.name|escapejs }}']"
+                  rows="3"
+                  spellcheck="false"
+                  placeholder='{"key": "value"}'
+                  class="mt-1 block w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 font-mono text-xs text-zinc-900 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-brand-500 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
+                ></textarea>
+                <span class="mt-1 block text-[10px] text-zinc-500 dark:text-zinc-400">JSON value (will be parsed before sending).</span>
+              {% endif %}
+              {% if f.description %}
+                <span class="mt-1 block text-[10px] text-zinc-500 dark:text-zinc-400">{{ f.description }}</span>
+              {% endif %}
+            </label>
+          {% endfor %}
+        </div>
+      {% else %}
+        <p class="mt-4 text-xs text-zinc-500 dark:text-zinc-400">No input — just hit Send.</p>
+      {% endif %}
+
+      <div class="mt-5 flex items-center gap-3">
+        <button
+          type="button"
+          x-on:click="submit()"
+          x-bind:disabled="loading || !apiKey"
+          class="btn btn-primary text-sm disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          <span x-show="!loading">Send request</span>
+          <span x-show="loading" x-cloak>Sending...</span>
+        </button>
+        <span x-show="!apiKey" x-cloak class="text-xs text-zinc-500 dark:text-zinc-400">Paste an API key to enable Send.</span>
+      </div>
+
+      {# Response display #}
+      <div x-show="response" x-cloak class="mt-5 rounded-lg border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-zinc-900">
+        <div class="flex items-center justify-between gap-2">
+          <span
+            class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium tabular-nums"
+            x-bind:class="response && response.status >= 500 ? 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-400'
+                        : response && response.status >= 400 ? 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-400'
+                        : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400'"
+            x-text="response ? `HTTP ${response.status}` : ''"
+          ></span>
+          <span class="text-[10px] text-zinc-500 dark:text-zinc-400" x-text="response ? `${response.elapsed_ms} ms` : ''"></span>
+        </div>
+        <pre class="mt-3 overflow-x-auto rounded bg-zinc-900 p-3 text-xs text-zinc-100 dark:bg-zinc-950"><code x-text="response ? response.body : ''"></code></pre>
+      </div>
+
+      <div x-show="error" x-cloak class="mt-3 rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-xs text-rose-900 dark:border-rose-800 dark:bg-rose-950/40 dark:text-rose-200" x-text="error"></div>
+    </div>
+
+    <script nonce="{% csp_nonce %}">
+    function tryItPanel(opts) {
+      const sample = JSON.parse(document.getElementById('data-tryit-sample').textContent);
+      // Pre-fill jsonInputs textareas with the sample value (when it's
+      // an object/array) so the user has a starting shape to edit.
+      const jsonInputs = {};
+      const payload = {};
+      for (const [k, v] of Object.entries(sample)) {
+        if (v !== null && (typeof v === 'object' || Array.isArray(v))) {
+          jsonInputs[k] = JSON.stringify(v, null, 2);
+        } else {
+          payload[k] = v;
+        }
+      }
+      return {
+        url: opts.url,
+        method: opts.method,
+        apiKey: '',
+        payload,
+        jsonInputs,
+        loading: false,
+        response: null,
+        error: '',
+        async submit() {
+          this.error = '';
+          this.response = null;
+          this.loading = true;
+          try {
+            // Merge JSON-parsed textareas into payload.
+            const body = { ...this.payload };
+            for (const [k, raw] of Object.entries(this.jsonInputs)) {
+              if (!raw || !raw.trim()) continue;
+              try {
+                body[k] = JSON.parse(raw);
+              } catch (e) {
+                this.error = `Invalid JSON in field "${k}": ${e.message}`;
+                this.loading = false;
+                return;
+              }
+            }
+            const t0 = performance.now();
+            const r = await fetch(this.url, {
+              method: this.method,
+              headers: {
+                'Authorization': `Bearer ${this.apiKey}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify(body),
+            });
+            const elapsed = Math.round(performance.now() - t0);
+            const text = await r.text();
+            let pretty = text;
+            try { pretty = JSON.stringify(JSON.parse(text), null, 2); } catch (_) { /* keep raw */ }
+            this.response = { status: r.status, body: pretty, elapsed_ms: elapsed };
+          } catch (e) {
+            this.error = `Request failed: ${e.message}`;
+          } finally {
+            this.loading = false;
+          }
+        },
+      };
+    }
+    </script>
+  {% endif %}
+</section>

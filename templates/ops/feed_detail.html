@@ -1,0 +1,307 @@
+{% extends "ops/_layout.html" %}
+
+{% block page_title_tag %}Feed · {{ feed.source_id }}{% endblock %}
+{% block page_title %}<span class="font-mono [overflow-wrap:anywhere]">{{ feed.source_id }}</span>{% endblock %}
+{% block page_subtitle %}
+  <p class="mt-1 text-sm text-muted">
+    via {{ feed.channel }} · {{ feed.created_at|date:"Y-m-d H:i" }}
+    {% if feed.consumer %} · key {{ feed.consumer }}{% endif %}
+  </p>
+{% endblock %}
+{% block content_width %}max-w-[1600px]{% endblock %}
+
+{% comment %}
+  Status chip on the title line (dashboard pattern). Colour code matches
+  the queue: warn = waiting on the operator, info = in flight, ok =
+  landed, muted = a closed human decision, danger ONLY for failures.
+{% endcomment %}
+{% block page_actions %}
+  <span class="badge {% if feed.status == 'pending' %}badge-warn{% elif feed.status == 'approving' %}badge-info{% elif feed.status == 'approved' or feed.status == 'edited' %}badge-ok{% elif feed.status == 'rejected' %}badge-muted{% else %}badge-danger{% endif %}">
+    {{ feed.status }}
+  </span>
+{% endblock %}
+
+{% block content %}
+  <div class="mb-4"><a href="{% url 'brainconfig:feeds' %}" class="text-sm text-muted transition-colors hover:text-ink">&larr; Back to queue</a></div>
+
+  <div class="card mb-4">
+    <div class="card-header">
+      <h2 class="card-title">Captured source</h2>
+    </div>
+    <div class="card-body meta-grid">
+      <div class="min-w-0">
+        <div class="meta-label">Kind</div>
+        <div class="meta-value">{{ payload.source_kind }}</div>
+      </div>
+      {% if payload.title %}
+        <div class="min-w-0">
+          <div class="meta-label">Title</div>
+          <div>{{ payload.title }}</div>
+        </div>
+      {% endif %}
+      {% if payload.source_url %}
+        <div class="min-w-0 sm:col-span-2">
+          <div class="meta-label">URL</div>
+          <div class="meta-value [overflow-wrap:anywhere]">{{ payload.source_url }}</div>
+        </div>
+      {% endif %}
+      {% if payload.notes %}
+        <div class="min-w-0 sm:col-span-2">
+          <div class="meta-label">Notes for the feeder</div>
+          <div>{{ payload.notes }}</div>
+        </div>
+      {% endif %}
+      {% if fetch %}
+        <div class="min-w-0 sm:col-span-2">
+          <div class="meta-label">Fetch</div>
+          {% if fetch.ok %}
+            <div>ok · HTTP {{ fetch.status }} · {{ fetch.content_type }} · {{ fetch.bytes|filesizeformat }}{% if fetch.truncated %} · <span class="text-danger-ink">truncated at cap</span>{% endif %}</div>
+          {% else %}
+            <div class="text-danger-ink">failed — {{ fetch.error }}</div>
+          {% endif %}
+        </div>
+      {% endif %}
+      {% if feed.error %}
+        <div class="min-w-0 sm:col-span-2">
+          <div class="meta-label">Error</div>
+          <div class="text-danger-ink [overflow-wrap:anywhere]">{{ feed.error }}</div>
+        </div>
+      {% endif %}
+      {% if feed.decision_note %}
+        <div class="min-w-0 sm:col-span-2">
+          <div class="meta-label">Decision</div>
+          <div>{{ feed.decision_note }}{% if feed.decided_at %} <span class="text-xs text-muted">({{ feed.decided_at|date:"Y-m-d H:i" }})</span>{% endif %}</div>
+        </div>
+      {% endif %}
+      {% if feed.commit_hash %}
+        <div class="min-w-0 sm:col-span-2">
+          <div class="meta-label">Commit</div>
+          <div class="meta-value">{{ feed.commit_hash }}</div>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if feed.status == "approving" %}
+    {% if feed.approval_in_flight %}
+      <div class="notice mb-4 flex items-center gap-2.5">
+        <span class="dot dot-live"></span>
+        <span>Approval running — the worker is applying, committing, and pushing this feed. This page refreshes itself.</span>
+      </div>
+    {% else %}
+      <div class="notice mb-4">
+        <p class="font-medium">This approval never reported back.</p>
+        <p class="mt-1 text-sm">
+          It was claimed{% if feed.approve_claimed_at %} at {{ feed.approve_claimed_at|date:"Y-m-d H:i" }}{% endif %}
+          and the worker has been silent past its timeout — most likely it was restarted mid-apply.
+          Recovery checks the brain for a commit carrying this feed's <code>Feed-Id:</code> trailer:
+          if the push had already landed the feed is completed against that commit, otherwise it goes
+          back to pending for you to approve again. It runs automatically every ten minutes too.
+        </p>
+        <form method="post" x-data="{busy: false}" @submit="setTimeout(() => busy = true)" class="mt-3">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="recover" />
+          <button type="submit" :disabled="busy" class="btn-primary">Recover this approval</button>
+        </form>
+      </div>
+    {% endif %}
+  {% endif %}
+
+  {% if content %}
+    <div class="card mb-4 overflow-hidden">
+      <div class="card-header">
+        <h2 class="card-title">Captured content</h2>
+        <span class="text-xs font-mono text-muted">{{ feed.payload_bytes|filesizeformat }}</span>
+      </div>
+      {% comment %}
+        Rendered as plain preformatted text on purpose: fed content is
+        untrusted input (grill C12d) — never render it as markdown/HTML
+        in the ops UI.
+      {% endcomment %}
+      <pre class="max-h-96 overflow-auto p-4 text-xs whitespace-pre-wrap [overflow-wrap:anywhere]">{{ content }}</pre>
+    </div>
+  {% endif %}
+
+  {% if validation %}
+    <div class="card mb-4">
+      <div class="card-header">
+        <h2 class="card-title">Validation</h2>
+        {% if validation.valid %}
+          <span class="badge badge-ok">passes rules 1&ndash;8</span>
+        {% else %}
+          <span class="badge badge-danger">{{ validation.violations|length }} violation{{ validation.violations|length|pluralize }}</span>
+        {% endif %}
+      </div>
+      {% if validation.violations or validation.warnings %}
+        <div class="card-body space-y-1">
+          {% for v in validation.violations %}
+            <div class="text-xs text-danger-ink">rule {{ v.rule }} · <span class="font-mono">{{ v.path }}</span> — {{ v.message }}</div>
+          {% endfor %}
+          {% for w in validation.warnings %}
+            <div class="text-xs text-warn-ink">warn — {{ w }}</div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    </div>
+  {% endif %}
+
+  {% if diffs %}
+    <h2 class="section-title">Proposed changes — rendered as diff, on purpose (fed content is untrusted)</h2>
+    {% if feed.proposal.summary %}
+      <p class="mb-3 max-w-3xl text-sm">{{ feed.proposal.summary }}</p>
+    {% endif %}
+    {% for d in diffs %}
+      <div class="card mb-3 overflow-hidden">
+        <div class="flex items-center gap-2 border-b border-line px-4 py-2 text-xs">
+          <span class="min-w-0 truncate font-mono" title="{{ d.path }}">{{ d.path }}</span>
+          <span class="badge {% if d.action == 'create' %}badge-ok{% else %}badge-info{% endif %}">{{ d.action }}</span>
+          <span class="ms-auto shrink-0 whitespace-nowrap font-mono text-muted">+{{ d.added }} &minus;{{ d.removed }}</span>
+        </div>
+        <pre class="pane-terminal max-h-96 overflow-auto rounded-none border-0 p-0 text-xs">{% for kind, text in d.lines %}<div class="diff-line{% if kind == 'add' %} diff-add{% elif kind == 'del' %} diff-del{% elif kind == 'hunk' %} diff-hunk{% endif %}">{% if kind == 'add' %}+{% elif kind == 'del' %}-{% else %} {% endif %}{{ text }}</div>{% endfor %}</pre>
+      </div>
+    {% endfor %}
+
+    {% if feed.proposal.index_lines %}
+      <div class="card mb-3">
+        <div class="card-header">
+          <h2 class="card-title">INDEX lines</h2>
+          <span class="text-xs text-muted">applied by trusted code on approve</span>
+        </div>
+        <div class="card-body space-y-1 text-xs">
+          {% for l in feed.proposal.index_lines %}
+            <div class="font-mono text-signal-ink [overflow-wrap:anywhere]">+ {{ l.line }}</div>
+          {% endfor %}
+        </div>
+      </div>
+    {% endif %}
+    {% if feed.proposal.supersedes %}
+      <div class="card mb-3">
+        <div class="card-header">
+          <h2 class="card-title">Supersedes</h2>
+          <span class="text-xs text-muted">frontmatter edited by trusted code</span>
+        </div>
+        <div class="card-body space-y-1 text-xs">
+          {% for s in feed.proposal.supersedes %}
+            <div class="font-mono [overflow-wrap:anywhere]">{{ s.old_entity_id }} &rarr; superseded_by: {{ s.new_entity_id }}</div>
+          {% endfor %}
+        </div>
+      </div>
+    {% endif %}
+    {% if feed.proposal.issues %}
+      <div class="notice notice-warn mb-3 text-xs">
+        <div class="mb-1 font-medium text-warn-ink">Feeder issues — read before approving</div>
+        {% for i in feed.proposal.issues %}<div class="text-warn-ink">&bull; {{ i }}</div>{% endfor %}
+      </div>
+    {% endif %}
+
+    {% if feed.status == "pending" %}
+      <details class="card mb-3">
+        <summary class="cursor-pointer select-none px-4 py-3 text-sm font-medium">Edit proposal <span class="font-normal text-muted">(re-validates on save)</span></summary>
+        <form method="post" class="grid gap-3 border-t border-line px-4 py-4">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="save_edits" />
+          <label class="text-sm">
+            <span class="mb-1 block text-xs text-muted">Summary</span>
+            <textarea name="summary" rows="2" class="field-textarea">{{ feed.proposal.summary }}</textarea>
+          </label>
+          {% for i, f in edit_files %}
+            <label class="text-sm">
+              <span class="mb-1 block text-xs font-mono text-muted [overflow-wrap:anywhere]">{{ f.path }}</span>
+              <textarea name="file_content__{{ i }}" rows="10" class="field-textarea field-mono text-xs">{{ f.content }}</textarea>
+            </label>
+          {% endfor %}
+          {% for i, l in edit_lines %}
+            <label class="text-sm">
+              <span class="mb-1 block text-xs text-muted">INDEX line — {{ l.entity_id }}</span>
+              <input type="text" name="index_line__{{ i }}" value="{{ l.line }}" class="field-input field-mono text-xs" />
+            </label>
+          {% endfor %}
+          <div>
+            <button type="submit" class="btn-primary">Save + re-validate</button>
+          </div>
+        </form>
+      </details>
+
+      {% comment %}
+        The decision bar. Approve queues background work on the worker,
+        so its button arms a DEFERRED busy-disable (setTimeout, never
+        synchronous — Alpine submit gotchas in CLAUDE.md). When
+        validation fails the button is a plain static-disabled element
+        instead: `:disabled="busy"` would evaluate false at init and
+        strip a server-rendered disabled attribute.
+      {% endcomment %}
+      <div class="card mb-6">
+        <div class="card-header">
+          <h2 class="card-title">Decision</h2>
+          <span class="text-xs text-muted">approve commits + pushes on the worker; reject closes with a note</span>
+        </div>
+        <div class="card-body flex flex-wrap items-center gap-3">
+          {% if can_approve %}
+            <form method="post" x-data="{busy: false}" @submit="setTimeout(() => busy = true)">
+              {% csrf_token %}
+              <input type="hidden" name="action" value="approve" />
+              <button type="submit" :disabled="busy" class="btn-signal">
+                Approve{% if feed.proposal_edited %} (edited){% endif %}
+              </button>
+            </form>
+          {% else %}
+            <button type="button" disabled title="Validation must pass first" class="btn-signal">
+              Approve{% if feed.proposal_edited %} (edited){% endif %}
+            </button>
+            <span class="text-xs text-muted">Fix the violations above to unlock approve.</span>
+          {% endif %}
+          <form method="post" class="flex min-w-40 grow flex-wrap items-center gap-2">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="reject" />
+            <div class="min-w-0 grow">
+              <input type="text" name="reason" required placeholder="Reject reason (required)" class="field-input" />
+            </div>
+            <button type="submit" class="btn-danger-ghost">Reject</button>
+          </form>
+        </div>
+      </div>
+    {% endif %}
+
+    <details class="mb-6">
+      <summary class="cursor-pointer select-none text-xs text-muted">Raw proposal JSON</summary>
+      <pre class="mt-2 max-h-96 overflow-auto rounded-control border border-line bg-surface p-4 text-xs whitespace-pre-wrap [overflow-wrap:anywhere]">{{ proposal_json }}</pre>
+    </details>
+  {% elif feed.status == "pending" %}
+    {% if feed.extraction_in_flight %}
+      <div class="empty-state">
+        <span class="dot dot-live"></span>
+        <p class="empty-state-title">Extraction running</p>
+        <p class="max-w-md text-sm">
+          The feeder agent is reading this capture (queued {{ feed.extract_queued_at|date:"H:i:s" }}).
+          The proposal appears here when it lands — this page refreshes itself.
+          Follow progress on <a class="link-accent" href="{% url 'brainconfig:tasks' %}">Tasks</a>.
+        </p>
+        <button type="button" disabled class="btn-primary mt-2">Extracting&hellip;</button>
+      </div>
+    {% else %}
+      <div class="empty-state">
+        <p class="empty-state-title">No proposal yet</p>
+        <p class="max-w-md text-sm">
+          {% if feed.error %}The last extraction failed — the error in the card above has the details.{% else %}Run extraction to have the feeder agent turn this capture into a reviewable proposal.{% endif %}
+          It runs on the worker; nothing touches the brain until you approve.
+        </p>
+        <form method="post" x-data="{busy: false}" @submit="setTimeout(() => busy = true)" class="mt-2">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="extract" />
+          <button type="submit" :disabled="busy" class="btn-primary">
+            {% if feed.error %}Retry extraction{% else %}Run extraction{% endif %}
+          </button>
+        </form>
+      </div>
+    {% endif %}
+  {% endif %}
+
+  {% comment %}
+    Only poll while something is actually running: a wedged `approving`
+    feed would otherwise reload every 5s forever, waiting on nobody.
+  {% endcomment %}
+  {% if feed.extraction_in_flight or feed.approval_in_flight %}
+    {# Nonce REQUIRED — see the note in ops/tasks.html. #}
+    <script nonce="{{ csp_nonce }}">setTimeout(function () { window.location.reload(); }, 5000);</script>
+  {% endif %}
+{% endblock %}

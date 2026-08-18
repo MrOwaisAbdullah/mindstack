@@ -1,0 +1,17 @@
+# Line-ending policy. Deliberately narrow: this repo has no `* text=auto`
+# because introducing one would renormalize every existing file in a single
+# noisy commit. Only the files where EOLs actually change behaviour are
+# pinned.
+
+# Generated Tailwind build artifact. MUST stay LF: it is committed, and
+# apps/core/tests/test_css_build.py rebuilds it and byte-compares against
+# the committed copy. With the default core.autocrlf=true on Windows a
+# fresh clone would check this out as CRLF (72,209 bytes) while the CLI
+# emits LF (72,208), failing the check for every Windows contributor on
+# their first run. The test also normalizes EOLs defensively, but the file
+# should be canonical in the first place.
+static/css/tw.css	text eol=lf
+
+# Shell scripts must be LF or they do not run: a CRLF shebang makes the
+# kernel look for an interpreter literally named `bash\r`.
+*.sh	text eol=lf

@@ -1,0 +1,63 @@
+{% extends "ops/_layout.html" %}
+{% comment %}
+  Living style guide for the ops component layer (M5.6.1).
+
+  Every component is rendered TWICE — once in the ambient theme and once
+  inside a `.dark` container. `.dark` is a class selector in tokens.css, so
+  putting it on a wrapper re-points the semantic variables for that subtree
+  only; components pick the new values up automatically because they style
+  against tokens rather than literals. That is the whole architecture,
+  demonstrated: if a component hardcodes a colour, its dark copy is visibly
+  wrong on this page and nowhere else.
+
+  RULE FOR THIS FILE: no inline style attributes, ever. It is the reference
+  for how the other templates look after M5.6.2, and the enforced CSP drops
+  inline style attributes anyway.
+
+  The swatch CSS below is a nonce'd <style> BLOCK, which is a different
+  thing from a style attribute and is explicitly allowed by our CSP
+  (`style-src 'self' 'nonce-…'`). It lives here rather than in app.css
+  because it is dev-only furniture and does not belong in the stylesheet
+  every visitor downloads.
+{% endcomment %}
+
+{% block page_title_tag %}Style guide{% endblock %}
+{% block page_title %}Style guide{% endblock %}
+{% block page_subtitle %}
+  <p class="page-subtitle">
+    The component vocabulary, in both themes. Development-only. If a
+    component looks wrong in the dark column, it is styling against a
+    literal instead of a semantic token.
+  </p>
+{% endblock %}
+
+{% block content %}
+<style nonce="{{ csp_nonce }}">
+  .sg-swatch {
+    display: inline-block;
+    width: 2.25rem;
+    height: 2.25rem;
+    flex: none;
+    border-radius: var(--radius-control);
+    border: 1px solid var(--line);
+  }
+  .sg-swatch-surface        { background: var(--surface); }
+  .sg-swatch-surface-2      { background: var(--surface-2); }
+  .sg-swatch-ink            { background: var(--ink); }
+  .sg-swatch-muted          { background: var(--muted); }
+  .sg-swatch-line           { background: var(--line); }
+  .sg-swatch-accent         { background: var(--accent); }
+  .sg-swatch-accent-strong  { background: var(--accent-strong); }
+  .sg-swatch-accent-contrast{ background: var(--accent-contrast); }
+  .sg-swatch-signal         { background: var(--signal); }
+  .sg-swatch-warn           { background: var(--warn); }
+  .sg-swatch-danger         { background: var(--danger); }
+  .sg-swatch-term-900       { background: var(--c-ink-900); }
+  .sg-swatch-term-700       { background: var(--c-ink-700); }
+  .sg-swatch-term-300       { background: var(--c-ink-300); }
+</style>
+
+{% include "ops/_styleguide_gallery.html" with theme_label="Light theme" theme_class="" %}
+{% include "ops/_styleguide_gallery.html" with theme_label="Dark theme" theme_class="dark" %}
+
+{% endblock %}

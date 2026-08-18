@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}{{ APP_NAME }}{% endblock %}
+{% block meta_description %}{{ APP_NAME }}.{% endblock %}
+{% block body %}
+<main class="min-h-screen flex flex-col items-center justify-center px-6 text-center">
+  <img src="{% static 'img/brain-hero.svg' %}" alt=""
+       class="home-hero-img w-56 h-56 md:w-72 md:h-72 select-none" draggable="false" />
+  <h1 class="home-title mt-8 text-5xl md:text-6xl font-bold tracking-tight">{{ APP_NAME }}</h1>
+  <p class="home-sub mt-4 text-lg">Private mind server.</p>
+  <a href="{% url 'login' %}"
+     class="home-cta mt-10 inline-flex items-center gap-2 px-8 py-3 text-sm font-semibold">
+    Sign in
+  </a>
+</main>
+{% endblock %}

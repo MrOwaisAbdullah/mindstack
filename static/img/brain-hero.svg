@@ -1,0 +1,74 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 320" fill="none">
+  <!-- Placeholder hero: a neural "brain" mark in the theme indigo/violet
+       palette. Replace with the AI-generated portrait (brain-hero.png)
+       when it exists — templates/home.html points here. -->
+  <defs>
+    <linearGradient id="g1" x1="60" y1="80" x2="270" y2="250" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#6366f1"/>
+      <stop offset="1" stop-color="#9b7cc4"/>
+    </linearGradient>
+    <radialGradient id="g2" cx="0.5" cy="0.45" r="0.6">
+      <stop offset="0" stop-color="#6366f1" stop-opacity="0.14"/>
+      <stop offset="1" stop-color="#6366f1" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <circle cx="160" cy="160" r="150" fill="url(#g2)"/>
+
+  <!-- brain silhouette -->
+  <path d="M160 62
+           C 132 50, 96 58, 84 84
+           C 60 90, 46 116, 54 140
+           C 40 158, 44 188, 64 200
+           C 64 226, 88 244, 112 238
+           C 122 258, 152 264, 160 250
+           C 168 264, 198 258, 208 238
+           C 232 244, 256 226, 256 200
+           C 276 188, 280 158, 266 140
+           C 274 116, 260 90, 236 84
+           C 224 58, 188 50, 160 62 Z"
+        stroke="url(#g1)" stroke-width="4" stroke-linejoin="round" fill="#fffef7" fill-opacity="0.6"/>
+  <!-- center fissure -->
+  <path d="M160 66 C 154 120, 166 200, 160 246" stroke="url(#g1)" stroke-width="3" stroke-linecap="round"/>
+
+  <!-- synapse network, left hemisphere -->
+  <g stroke="#6366f1" stroke-width="1.6" opacity="0.75">
+    <path d="M84 130 L112 108 L140 124 L118 152 L84 130 Z"/>
+    <path d="M118 152 L96 182 L124 200 L146 172 L118 152"/>
+    <path d="M140 124 L146 172"/>
+    <path d="M112 108 L134 88"/>
+    <path d="M96 182 L76 166"/>
+  </g>
+  <!-- synapse network, right hemisphere -->
+  <g stroke="#9b7cc4" stroke-width="1.6" opacity="0.75">
+    <path d="M236 130 L208 108 L180 124 L202 152 L236 130 Z"/>
+    <path d="M202 152 L224 182 L196 200 L174 172 L202 152"/>
+    <path d="M180 124 L174 172"/>
+    <path d="M208 108 L186 88"/>
+    <path d="M224 182 L244 166"/>
+  </g>
+
+  <!-- nodes -->
+  <g fill="#6366f1">
+    <circle cx="84" cy="130" r="5"/>
+    <circle cx="112" cy="108" r="4"/>
+    <circle cx="140" cy="124" r="5"/>
+    <circle cx="118" cy="152" r="6"/>
+    <circle cx="96" cy="182" r="4"/>
+    <circle cx="124" cy="200" r="5"/>
+    <circle cx="146" cy="172" r="4"/>
+    <circle cx="134" cy="88" r="4"/>
+    <circle cx="76" cy="166" r="3.5"/>
+  </g>
+  <g fill="#9b7cc4">
+    <circle cx="236" cy="130" r="5"/>
+    <circle cx="208" cy="108" r="4"/>
+    <circle cx="180" cy="124" r="5"/>
+    <circle cx="202" cy="152" r="6"/>
+    <circle cx="224" cy="182" r="4"/>
+    <circle cx="196" cy="200" r="5"/>
+    <circle cx="174" cy="172" r="4"/>
+    <circle cx="186" cy="88" r="4"/>
+    <circle cx="244" cy="166" r="3.5"/>
+  </g>
+</svg>

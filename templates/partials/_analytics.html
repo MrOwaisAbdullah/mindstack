@@ -1,0 +1,32 @@
+{% comment %}
+  Google Analytics 4 (gtag.js) — consent-gated.
+
+  Rendered in <head> by base.html. Two gates BOTH have to pass before a
+  single byte of Google's script loads:
+
+    1. `GOOGLE_ANALYTICS_ID` is set (operator configured GA via env). When
+       blank, this whole block is skipped AND the CSP never allowlists any
+       Google host (see apps/core/security/headers.py).
+    2. The visitor has accepted the cookie banner — i.e. the
+       `analytics_consent` cookie equals "granted". Until then gtag.js does
+       not load, so no analytics cookie is set and no beacon is sent. This
+       is what keeps us honest with the privacy policy's "only with consent"
+       claim (templates/marketing/privacy.html, section 6).
+
+  The cookie is written by templates/partials/_cookie_consent.html; on
+  "Accept" that partial reloads the page, so on the next request this gate
+  flips true and gtag.js renders server-side with the per-request CSP nonce.
+
+  `anonymize_ip` is on so GA truncates the visitor IP before storage —
+  belt-and-suspenders alongside the consent gate for GDPR.
+{% endcomment %}
+{% load security_tags %}
+{% if GOOGLE_ANALYTICS_ID and request.COOKIES.analytics_consent == "granted" %}
+  <script defer src="https://www.googletagmanager.com/gtag/js?id={{ GOOGLE_ANALYTICS_ID }}"></script>
+  <script nonce="{% csp_nonce %}">
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){ dataLayer.push(arguments); }
+    gtag('js', new Date());
+    gtag('config', '{{ GOOGLE_ANALYTICS_ID }}', { anonymize_ip: true });
+  </script>
+{% endif %}

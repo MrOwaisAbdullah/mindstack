@@ -1,0 +1,24 @@
+{% comment %}
+  pulse-animation skeleton loader.
+
+  Parameters:
+    rows  — iterable; pass a list/range from the view (default 3 lines built-in)
+    h     — Tailwind height class for each bar (default `h-3`)
+    label — accessible label (default "Loading")
+
+  Callers needing N lines pass `rows=range(N)` from their view context.
+  Most pages use the default 3-line skeleton inline below.
+  Honors `prefers-reduced-motion` via the global rule in app.css.
+{% endcomment %}
+<div role="status" aria-label="{{ label|default:'Loading' }}" class="space-y-2">
+  {% if rows %}
+    {% for _ in rows %}
+      <div class="{{ h|default:'h-3' }} w-full animate-pulse rounded-md bg-zinc-200 dark:bg-zinc-800"></div>
+    {% endfor %}
+  {% else %}
+    <div class="{{ h|default:'h-3' }} w-full animate-pulse rounded-md bg-zinc-200 dark:bg-zinc-800"></div>
+    <div class="{{ h|default:'h-3' }} w-5/6 animate-pulse rounded-md bg-zinc-200 dark:bg-zinc-800"></div>
+    <div class="{{ h|default:'h-3' }} w-4/6 animate-pulse rounded-md bg-zinc-200 dark:bg-zinc-800"></div>
+  {% endif %}
+  <span class="sr-only">{{ label|default:'Loading' }}</span>
+</div>

@@ -1,0 +1,32 @@
+# Brain server — runtime dependencies (vendored-core build).
+# Version floors follow mcp-api-starter-template's pyproject (incl. the
+# Django 5.2.14 CVE floor); trimmed to what the vendored apps + brain
+# apps actually import.
+django>=5.2.14,<6
+uvicorn[standard]>=0.30
+gunicorn>=23.0
+pydantic>=2.7
+pydantic-settings>=2.3
+python-dotenv>=1.0
+fastmcp>=2.0
+httpx>=0.27
+redis>=5.0
+# config/cache.py selects django_redis.cache.RedisCache whenever the
+# boot-time PING succeeds — without this package that path raises
+# InvalidCacheBackendError at startup. Only the LocMem fallback (no
+# reachable Redis) hid it.
+django-redis>=5.4
+django-q2>=1.7
+croniter>=2.0
+whitenoise>=6.7
+markdown>=3.6
+pygments>=2.18
+cryptography>=42.0
+django-cryptography-django5>=2.2
+psycopg[binary]>=3.1
+# Claude Agent SDK — pinned EXACT: pinning the SDK pins its bundled CLI
+# binary (PLAN.md §7 grill C1). Bump deliberately, never with a range.
+claude-agent-sdk==0.2.128
+python-json-logger>=3.0
+filelock>=3.13
+pyyaml>=6.0

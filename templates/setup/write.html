@@ -1,0 +1,84 @@
+{% extends "setup/_layout.html" %}
+
+{% block step_title %}Let the server write back{% endblock %}
+{% block step_blurb %}
+  When you approve a feed, the server commits it and pushes. The read-only
+  deploy key from the last step deliberately cannot do that, so pushing
+  needs its own credential.
+{% endblock %}
+
+{% block step_body %}
+  {% if configured and source != "settings" %}
+    <div class="mb-5 rounded-lg border px-4 py-3 text-sm border-line">
+      A write credential is already supplied by this deployment's
+      {% if source == "env" %}environment{% else %}mounted secret file{% endif %},
+      which takes precedence over anything saved here. Nothing to do.
+    </div>
+  {% endif %}
+
+  <ol class="mb-5 list-decimal space-y-1 ps-5 text-sm">
+    <li>Open <a href="{{ token_url }}" target="_blank" rel="noopener"
+        class="underline">GitHub &rarr; fine-grained personal access token</a>.</li>
+    <li>Repository access: <strong>Only select repositories</strong> &rarr; your brain.</li>
+    <li>Permissions: <strong>Contents: Read and write</strong>. Nothing else.</li>
+    <li>Generate, then paste it below.</li>
+  </ol>
+
+  {% if result %}
+    <div class="notice mt-5 mb-5 {% if result.ok %}notice-ok{% else %}notice-danger{% endif %}">
+      <div class="font-semibold {% if result.ok %}text-signal-ink{% else %}text-danger-ink{% endif %}">
+        {{ result.message }}
+      </div>
+      {% if result.git_error %}
+        <pre class="pane-terminal mt-2 overflow-x-auto p-3 text-xs">{{ result.git_error }}</pre>
+      {% endif %}
+      {% if not result.ok %}
+        <p class="mt-2 text-muted">
+          Checking now costs a second. Not checking costs a failed feed
+          later, after you have stopped thinking about credentials.
+        </p>
+      {% endif %}
+    </div>
+  {% endif %}
+
+  {# Deferred disable — see the note in setup/read.html. #}
+  <form method="post" x-data="{busy: false}" @submit="setTimeout(() => busy = true)">
+    {% csrf_token %}
+    <label for="id_pat" class="block text-sm font-medium">Token</label>
+    <input type="password" name="pat" id="id_pat" autocomplete="off"
+           placeholder="{% if configured %}stored — paste a new one to replace{% else %}github_pat_…{% endif %}"
+           class="login-input mt-1 block w-full max-w-md px-4 py-2.5 text-sm font-mono" />
+    <p class="mt-1.5 text-xs text-muted">
+      Stored encrypted in this server's database. To keep it out of the
+      database entirely, mount it as a file and set
+      <code>BRAIN_GIT_WRITE_PAT_PATH</code> instead — see docs/SECURITY.md.
+    </p>
+
+    <div class="mt-5 flex flex-wrap items-center gap-2">
+      <button type="submit" :disabled="busy"
+              class="home-cta inline-flex items-center justify-center px-6 py-3 text-sm font-semibold">
+        Save and continue
+      </button>
+      <button type="submit" name="action" value="verify" :disabled="busy"
+              class="rounded-lg border px-4 py-2 text-sm border-line">
+        Verify
+      </button>
+      <button type="submit" name="action" value="skip" :disabled="busy"
+              class="rounded-lg border px-4 py-2 text-sm border-line text-muted">
+        Skip for now
+      </button>
+    </div>
+    <p class="mt-2 text-xs text-muted">
+      Verify asks GitHub whether this token may push, without pushing
+      anything and without saving it. Read access is not evidence of write
+      access — a token that clones fine can still be missing
+      <strong>Contents: Read and write</strong>, and that only shows up
+      later as a feed that fails to push.
+    </p>
+    <p class="mt-2 text-xs text-muted">
+      Skipping is fine. Approvals still commit to the clone on this server;
+      the dashboard will tell you the brain is ahead of GitHub until you add
+      a token.
+    </p>
+  </form>
+{% endblock %}

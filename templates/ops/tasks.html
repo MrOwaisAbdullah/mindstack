@@ -1,0 +1,292 @@
+{% extends "ops/_layout.html" %}
+
+{% block page_title_tag %}Tasks{% endblock %}
+{% block page_title %}Background tasks{% endblock %}
+{% block page_subtitle %}
+  <p class="mt-1 text-sm text-muted">
+    {% if busy %}
+      Work is in flight — this page refreshes itself every 5 seconds to follow it.
+    {% else %}
+      Everything the worker does lands here: setup jobs, feed extractions, and the SDK run ledger.
+    {% endif %}
+  </p>
+{% endblock %}
+{% block content_width %}max-w-[1600px]{% endblock %}
+
+{% comment %}
+  The queue chip mirrors the dashboard's sync chip: system state on the
+  title line, not buried in prose. `queue_depth is None` is the broker
+  being unreachable — a different (and worse) fact than an empty queue,
+  so it gets the warn tint rather than pretending to be idle.
+{% endcomment %}
+{% block page_actions %}
+  {% if busy %}
+    <span class="badge badge-info"><span class="dot dot-live"></span> Working{% if queue_depth %} · {{ queue_depth }} queued{% endif %}</span>
+  {% elif queue_depth is None %}
+    <span class="badge badge-warn"><span class="dot dot-warn"></span> Queue unreachable</span>
+  {% elif queue_depth %}
+    <span class="badge badge-info"><span class="dot dot-info"></span> {{ queue_depth }} queued</span>
+  {% else %}
+    <span class="badge badge-muted"><span class="dot dot-muted"></span> Idle</span>
+  {% endif %}
+{% endblock %}
+
+{% block content %}
+  <div class="space-y-4 xl:space-y-6">
+
+    {# --- setup & repair jobs (only while a record exists) ------------- #}
+    {% if ops_jobs %}
+      <div class="card">
+        <div class="card-header">
+          <h2 class="card-title">Setup &amp; repair jobs</h2>
+          <a href="{% url 'brainconfig:health' %}" class="text-xs link-accent">Setup &amp; health &rarr;</a>
+        </div>
+        {% for j in ops_jobs %}
+          <div class="card-row flex items-start gap-2.5">
+            <span class="dot mt-1.5 {% if j.state == 'running' %}dot-live{% elif j.state == 'failed' %}dot-danger{% else %}dot-ok{% endif %}"></span>
+            <div class="min-w-0 flex-1">
+              <div class="flex flex-wrap items-center gap-2">
+                <span class="text-sm font-medium">{{ j.label|default:j.spec.label }}</span>
+                {% if j.state == "running" %}
+                  <span class="text-xs font-mono text-muted">{% if j.total %}{{ j.step }}/{{ j.total }}{% else %}running{% endif %}</span>
+                {% elif j.state == "failed" %}
+                  <span class="badge badge-danger">failed</span>
+                {% else %}
+                  <span class="badge badge-ok">done</span>
+                {% endif %}
+              </div>
+              {% if j.result %}
+                <div class="mt-0.5 text-xs font-mono text-muted">{{ j.result }}</div>
+              {% endif %}
+              {% if j.error %}
+                <pre class="pane-terminal mt-2 overflow-x-auto p-3 text-xs">{{ j.error }}</pre>
+              {% endif %}
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    {% endif %}
+
+    {# --- feeds mid-pipeline (only while one is) ------------------------ #}
+    {% if extracting or approving %}
+      <div class="card">
+        <div class="card-header">
+          <h2 class="card-title">Feeds in flight</h2>
+          <a href="{% url 'brainconfig:feeds' %}" class="text-xs link-accent">Feed queue &rarr;</a>
+        </div>
+        <div class="table-wrap">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>Feed</th>
+                <th>Doing</th>
+                <th>Since</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for f in extracting %}
+                <tr>
+                  <td><a class="text-accent font-mono" href="{% url 'brainconfig:feed-detail' f.pk %}">{{ f.source_id }}</a></td>
+                  <td class="whitespace-nowrap"><span class="inline-flex items-center gap-1.5"><span class="dot dot-live"></span> extracting</span></td>
+                  <td class="whitespace-nowrap text-xs font-mono text-muted">{{ f.extract_queued_at|timesince }} ago</td>
+                </tr>
+              {% endfor %}
+              {% for f in approving %}
+                <tr>
+                  <td><a class="text-accent font-mono" href="{% url 'brainconfig:feed-detail' f.pk %}">{{ f.source_id }}</a></td>
+                  <td class="whitespace-nowrap"><span class="inline-flex items-center gap-1.5"><span class="dot dot-ok animate-pulse"></span> applying + pushing</span></td>
+                  <td class="whitespace-nowrap text-xs font-mono text-muted">{{ f.decided_at|timesince }} ago</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    {% endif %}
+
+    {# --- SDK operations in flight -------------------------------------- #}
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">SDK operations running</h2>
+      </div>
+      {% if running %}
+        <div class="table-wrap">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>Kind</th>
+                <th>Model</th>
+                <th>Started</th>
+                <th>State</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for op in running %}
+                <tr>
+                  <td class="font-mono">{{ op.kind }}</td>
+                  <td class="whitespace-nowrap text-xs font-mono text-muted">{{ op.model|default:"—" }}</td>
+                  <td class="whitespace-nowrap text-xs font-mono text-muted">{{ op.created_at|timesince }} ago</td>
+                  <td class="whitespace-nowrap">
+                    {% if op.is_stale %}
+                      <span class="badge badge-danger" title="Older than the worker timeout — the run was killed before it could finalize.">stale (likely killed)</span>
+                    {% else %}
+                      <span class="inline-flex items-center gap-1.5"><span class="dot dot-live"></span> <span class="text-xs">running</span></span>
+                    {% endif %}
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <div class="card-body flex items-start gap-2 text-sm text-muted">
+          <span class="dot dot-ok mt-1.5"></span>
+          <span>Nothing running — feed extractions, chat replies, and connection tests appear here the moment they start.</span>
+        </div>
+      {% endif %}
+    </div>
+
+    {# --- the finished-run ledger, paginated at 50 ----------------------- #}
+    <div id="sdk-ledger">
+      <div class="card">
+        <div class="card-header">
+          <h2 class="card-title">Recent SDK operations</h2>
+          {% if recent_page.paginator.count %}
+            <span class="text-xs text-muted">{{ recent_page.start_index }}&ndash;{{ recent_page.end_index }} of {{ recent_page.paginator.count }}</span>
+          {% endif %}
+        </div>
+        <div class="table-wrap">
+          <table class="table table-hover">
+            <thead>
+              <tr>
+                <th>Kind</th>
+                <th>Outcome</th>
+                <th>Model</th>
+                <th>Tokens in/out</th>
+                <th>Cost</th>
+                <th>Duration</th>
+                <th>Finished</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for op in recent_page %}
+                <tr>
+                  <td class="font-mono">{{ op.kind }}</td>
+                  <td>
+                    {% if op.ok %}
+                      <span class="badge badge-ok">ok</span>
+                    {% else %}
+                      <span class="badge badge-danger" title="{{ op.error_class }}">{{ op.error_class|default:"error" }}</span>
+                    {% endif %}
+                  </td>
+                  <td class="whitespace-nowrap text-xs font-mono text-muted">{{ op.model|default:"—" }}</td>
+                  <td class="whitespace-nowrap text-xs font-mono text-muted">{{ op.input_tokens|default:"—" }} / {{ op.output_tokens|default:"—" }}</td>
+                  <td class="whitespace-nowrap text-xs font-mono text-muted">{% if op.cost_usd is not None %}${{ op.cost_usd|floatformat:4 }}{% else %}—{% endif %}</td>
+                  <td class="whitespace-nowrap text-xs font-mono text-muted">{% if op.duration_ms is not None %}{{ op.duration_ms }} ms{% else %}—{% endif %}</td>
+                  <td class="whitespace-nowrap text-xs font-mono text-muted">{{ op.finished_at|date:"Y-m-d H:i:s" }}</td>
+                </tr>
+              {% empty %}
+                <tr>
+                  <td colspan="7" class="px-4 py-10 text-center text-muted">
+                    No finished runs yet — the first feed extraction, chat reply, or connection test lands here with its tokens and cost.
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      {% if recent_page.paginator.num_pages > 1 %}
+        <nav class="mt-3 flex flex-wrap items-center justify-between gap-3" aria-label="SDK operations pagination">
+          <span class="text-xs text-muted">Page {{ recent_page.number }} of {{ recent_page.paginator.num_pages }}</span>
+          <div class="flex gap-2">
+            {% if recent_page.has_previous %}
+              <a class="btn-ghost btn-sm" href="?page={{ recent_page.previous_page_number }}&amp;wpage={{ worker_page_num }}#sdk-ledger">&larr; Previous</a>
+            {% endif %}
+            {% if recent_page.has_next %}
+              <a class="btn-ghost btn-sm" href="?page={{ recent_page.next_page_number }}&amp;wpage={{ worker_page_num }}#sdk-ledger">Next &rarr;</a>
+            {% endif %}
+          </div>
+        </nav>
+      {% endif %}
+    </div>
+
+    {# --- worker task history, paginated at 50 --------------------------- #}
+    <div id="worker-ledger">
+      <div class="card">
+        <div class="card-header">
+          <h2 class="card-title">Recent worker tasks <span class="font-normal text-muted">(Q2)</span></h2>
+          {% if worker_page.paginator.count %}
+            <span class="text-xs text-muted">{{ worker_page.start_index }}&ndash;{{ worker_page.end_index }} of {{ worker_page.paginator.count }}</span>
+          {% endif %}
+        </div>
+        <div class="table-wrap">
+          <table class="table table-hover">
+            <thead>
+              <tr>
+                <th>Task</th>
+                <th>Outcome</th>
+                <th>Started</th>
+                <th>Took</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% if worker_page %}
+                {% for t in worker_page %}
+                  <tr>
+                    <td class="text-xs font-mono">{{ t.func }}</td>
+                    <td>
+                      {% if t.success %}
+                        <span class="badge badge-ok">ok</span>
+                      {% else %}
+                        <span class="badge badge-danger">failed</span>
+                      {% endif %}
+                    </td>
+                    <td class="whitespace-nowrap text-xs font-mono text-muted">{{ t.started|date:"Y-m-d H:i:s" }}</td>
+                    <td class="whitespace-nowrap text-xs font-mono text-muted">{{ t.time_taken|floatformat:1 }}s</td>
+                  </tr>
+                {% empty %}
+                  <tr>
+                    <td colspan="4" class="px-4 py-10 text-center text-muted">
+                      Nothing recorded yet — sync, extraction, and approval jobs appear here once they finish.
+                    </td>
+                  </tr>
+                {% endfor %}
+              {% else %}
+                <tr>
+                  <td colspan="4" class="px-4 py-10 text-center text-muted">
+                    Task history is unavailable — the worker's task table could not be read.
+                  </td>
+                </tr>
+              {% endif %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      {% if worker_page.paginator.num_pages > 1 %}
+        <nav class="mt-3 flex flex-wrap items-center justify-between gap-3" aria-label="Worker tasks pagination">
+          <span class="text-xs text-muted">Page {{ worker_page.number }} of {{ worker_page.paginator.num_pages }}</span>
+          <div class="flex gap-2">
+            {% if worker_page.has_previous %}
+              <a class="btn-ghost btn-sm" href="?page={{ recent_page.number }}&amp;wpage={{ worker_page.previous_page_number }}#worker-ledger">&larr; Previous</a>
+            {% endif %}
+            {% if worker_page.has_next %}
+              <a class="btn-ghost btn-sm" href="?page={{ recent_page.number }}&amp;wpage={{ worker_page.next_page_number }}#worker-ledger">Next &rarr;</a>
+            {% endif %}
+          </div>
+        </nav>
+      {% endif %}
+    </div>
+
+  </div>
+
+  {% if busy %}
+    {% comment %}
+      The nonce is REQUIRED: the enforced CSP refuses any inline script
+      without one, and this block only renders while work is in flight —
+      i.e. exactly when the auto-refresh is the point. location.reload()
+      keeps the query string, so pagination survives the refresh.
+    {% endcomment %}
+    <script nonce="{{ csp_nonce }}">setTimeout(function () { window.location.reload(); }, 5000);</script>
+  {% endif %}
+{% endblock %}

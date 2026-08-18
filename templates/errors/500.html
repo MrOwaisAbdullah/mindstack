@@ -1,0 +1,22 @@
+{% extends "errors/_layout.html" %}
+{% load i18n %}
+{% block title %}{% blocktrans with app=APP_NAME %}Something broke · {{ app }}{% endblocktrans %}{% endblock %}
+
+{% block illustration %}
+  <div class="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-rose-100 text-rose-600 dark:bg-rose-950 dark:text-rose-400" aria-hidden="true">
+    <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/></svg>
+  </div>
+{% endblock %}
+
+{% block error_title %}{% trans "Something broke on our side" %}{% endblock %}
+
+{% block error_body %}
+  {% trans "Our team has been notified. If you need to follow up, share the reference id below — it pins this exact request in our logs." %}
+{% endblock %}
+
+{% block error_actions %}
+  <div class="mt-8 flex flex-wrap justify-center gap-2">
+    <a href="/" class="btn btn-secondary text-sm">{% trans "Back to home" %}</a>
+    <a href="mailto:{{ SUPPORT_EMAIL|default:'support@example.com' }}{% if request_id %}?subject=Server%20error%20{{ request_id }}{% endif %}" class="btn btn-primary text-sm">{% trans "Email support" %}</a>
+  </div>
+{% endblock %}

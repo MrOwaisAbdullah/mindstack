@@ -1,0 +1,1144 @@
+/*
+ * Tailwind SOURCE — compiles to `static/css/tw.css` (what base.html
+ * loads) via `.\dev.ps1 css` (or `bash scripts/build-css.sh`). COMMIT
+ * the rebuilt tw.css after edits — the Docker image has no CSS build
+ * step, so self-hosters and the GHCR image need no toolchain.
+ *
+ * THIS FILE LIVES OUTSIDE `static/` ON PURPOSE. It is build input, not a
+ * served asset, and browsers cannot interpret @import/@apply anyway. It
+ * used to sit in static/css/, where `collectstatic` picked it up and
+ * WhiteNoise's manifest storage tried to resolve `@import "tailwindcss"`
+ * as a real file — MissingFileError on 'css/tailwindcss', collectstatic
+ * exits non-zero, and the web container crash-loops on first boot. That
+ * only ever happens under prod settings, which is why it survived every
+ * local check until a blank prod-settings instance was booted.
+ * Self-hosted Inter + JetBrains Mono live in static/fonts/.
+ *
+ * Tailwind v4: configuration is CSS-first (`@theme` below). There is no
+ * JS config — `tailwind.config.js` was deleted with this port; nothing
+ * had read it since the build stopped running.
+ */
+
+/* `source(none)` turns OFF v4's automatic content detection and makes the
+ * `@source` list below the whole truth. Without it v4 scans up from the
+ * project root, which here means `data/brain-repo` (the entire brain, a
+ * few thousand markdown files) and `.venv/` — slow, and it would mine
+ * class-like strings out of prose and Python packages. */
+@import "tailwindcss" source(none);
+
+@source "../../templates/**/*.html";
+@source "../../apps/**/templates/**/*.html";
+@source "../../apps/**/*.py";
+@source "../../static/js/**/*.js";
+
+/* Bundled with the standalone CLI — verified loading under v4.3.3. */
+@plugin "@tailwindcss/forms";
+@plugin "@tailwindcss/typography";
+
+/* v4's default `dark:` variant follows prefers-color-scheme; this app
+ * toggles a `.dark` class on <html> (see partials/_theme_toggle.html),
+ * which is what `darkMode: "class"` used to declare. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  /* `brand` aliases the indigo scale so brand-500 = #6366f1 (--c-indigo)
+   * and brand-600 = #4f46e5 (--c-indigo-strong), matching the semantic
+   * accent in tokens.css. */
+  --color-brand-50:  #eef2ff;
+  --color-brand-100: #e0e7ff;
+  --color-brand-200: #c7d2fe;
+  --color-brand-300: #a5b4fc;
+  --color-brand-400: #818cf8;
+  --color-brand-500: #6366f1;
+  --color-brand-600: #4f46e5;
+  --color-brand-700: #4338ca;
+  --color-brand-800: #3730a3;
+  --color-brand-900: #312e81;
+  --color-brand-950: #1e1b4b;
+
+  /* Geometry -> rounded-card / rounded-control / rounded-pill,
+   * shadow-card / shadow-soft. Literals, and defined HERE rather than in
+   * tokens.css: a theme key cannot be `var()` of its own name (that is a
+   * self-reference, and it only appears to work because the unlayered
+   * copy in tokens.css outranks it — far too subtle to rely on).
+   * Geometry is also not the re-theming surface; colour is. Names stay
+   * clear of Tailwind's built-in --radius-{sm,md,lg} scale so those keep
+   * meaning what they say. */
+  --radius-card:    14px;
+  --radius-control: 10px;
+  --radius-pill:    999px;
+  --shadow-card: 0 1px 2px rgba(26,26,46,.06), 0 8px 24px rgba(26,26,46,.08);
+  --shadow-soft: 0 1px 2px rgba(26,26,46,.06), 0 2px 8px rgba(26,26,46,.06);
+
+  --font-sans: 'Inter', system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+  /* Headings. Lives here rather than tokens.css so `font-display` is a
+   * utility; tokens.css is colour/geometry only. */
+  --font-display: 'Space Grotesk', system-ui, sans-serif;
+  --font-body: var(--font-sans);
+
+  --text-5xl: 3rem;
+  --text-5xl--line-height: 1.1;
+  --text-5xl--letter-spacing: -0.02em;
+  --text-6xl: 3.75rem;
+  --text-6xl--line-height: 1.05;
+  --text-6xl--letter-spacing: -0.025em;
+}
+
+/* ---- The semantic layer from tokens.css, as real utilities ----
+ *
+ * `@theme inline` is load-bearing, not a style choice. A plain `@theme`
+ * would emit `:root { --color-surface: var(--surface) }` and have
+ * `.bg-surface` reference `var(--color-surface)`. Custom properties
+ * resolve their var() where they are DECLARED, so `--color-surface`
+ * would substitute the light value at :root and every descendant would
+ * inherit that already-resolved colour. Putting `.dark` on <html> hides
+ * this (the declaration and the override land on the same element), but
+ * `.dark` on any subtree — which is exactly how /ops/styleguide/ shows
+ * both themes at once — would leave every utility stuck on light while
+ * hand-written CSS using `var(--surface)` went dark. Half-dark cards
+ * with invisible text; found on the style guide, which is what it is for.
+ *
+ * `inline` substitutes the value into the utility instead, so
+ * `.bg-surface` is literally `background-color: var(--surface)` and
+ * re-resolves wherever it is used. Consequences worth stating:
+ *   1. Re-theming stays a one-file edit of tokens.css with no rebuild —
+ *      the point, since self-hosters have no toolchain.
+ *   2. Dark mode needs no `dark:` variants on components at all.
+ *   3. `--color-surface` and friends are NOT emitted to :root. Nothing
+ *      should reference them directly; hand-written CSS uses the short
+ *      names (`var(--surface)`), which tokens.css does emit.
+ *
+ * Components style against THESE, never a palette primitive and never a
+ * literal hex: a hardcoded colour is invisible in light-mode review and
+ * wrong in dark. */
+@theme inline {
+  --color-surface:   var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-ink:       var(--ink);
+  --color-muted:     var(--muted);
+  --color-line:      var(--line);
+  --color-accent:          var(--accent);
+  --color-accent-strong:   var(--accent-strong);
+  --color-accent-contrast: var(--accent-contrast);
+  --color-accent-2:  var(--accent-2);
+  --color-accent-3:  var(--accent-3);
+  --color-signal:    var(--signal);
+  --color-warn:      var(--warn);
+  --color-danger:    var(--danger);
+  /* Status colours as TEXT — see the note in tokens.css. Use
+   * text-signal-ink / text-warn-ink / text-danger-ink for words, and
+   * bg-signal / bg-warn / bg-danger for fills. */
+  --color-signal-ink: var(--signal-ink);
+  --color-warn-ink:   var(--warn-ink);
+  --color-danger-ink: var(--danger-ink);
+
+  /* Terminal scale — fixed in both themes (a log pane is dark by design),
+   * so these deliberately point at primitives the .dark block never
+   * re-points. */
+  --color-term-900: var(--c-ink-900);
+  --color-term-800: var(--c-ink-800);
+  --color-term-700: var(--c-ink-700);
+  --color-term-600: var(--c-ink-600);
+  --color-term-400: var(--c-ink-400);
+  --color-term-300: var(--c-ink-300);
+}
+
+/* ----- Web fonts (self-hosted, no CDN) ----- */
+@layer base {
+  @font-face {
+    font-family: "Inter";
+    font-style: normal;
+    font-weight: 400;
+    font-display: swap;
+    src: url("/static/fonts/Inter-Regular.woff2") format("woff2");
+  }
+  @font-face {
+    font-family: "Inter";
+    font-style: normal;
+    font-weight: 500;
+    font-display: swap;
+    src: url("/static/fonts/Inter-Medium.woff2") format("woff2");
+  }
+  @font-face {
+    font-family: "Inter";
+    font-style: normal;
+    font-weight: 600;
+    font-display: swap;
+    src: url("/static/fonts/Inter-SemiBold.woff2") format("woff2");
+  }
+  @font-face {
+    font-family: "Inter";
+    font-style: normal;
+    font-weight: 700;
+    font-display: swap;
+    src: url("/static/fonts/Inter-Bold.woff2") format("woff2");
+  }
+  @font-face {
+    font-family: "JetBrains Mono";
+    font-style: normal;
+    font-weight: 400;
+    font-display: swap;
+    src: url("/static/fonts/JetBrainsMono-Regular.woff2") format("woff2");
+  }
+  @font-face {
+    font-family: "JetBrains Mono";
+    font-style: normal;
+    font-weight: 700;
+    font-display: swap;
+    src: url("/static/fonts/JetBrainsMono-Bold.woff2") format("woff2");
+  }
+  /* Variable, not static instances: the UI sets the display font at
+     600 (font-semibold), a weight Space Grotesk ships no static file
+     for — only the variable axis covers it exactly. One file, 300-700.
+     Until this existed, headings rendered Space Grotesk only on
+     machines that had it installed (the author's) and system-ui for
+     everyone else — every screenshot lied. */
+  @font-face {
+    font-family: "Space Grotesk";
+    font-style: normal;
+    font-weight: 300 700;
+    font-display: swap;
+    src: url("/static/fonts/SpaceGrotesk-Variable.woff2") format("woff2");
+  }
+}
+
+/* ----- Design tokens + base resets ----- */
+@layer base {
+  /* Alpine.js x-cloak — hide elements until Alpine evaluates their
+   * directives. Previously lived as an inline <style nonce> in base.html,
+   * but HTMX's response parsing (e.g. /admin/errors/ polled every 5s)
+   * tripped style-src-elem CSPViolations because the polled page's
+   * nonce never matches the current page's nonce. Moving the rule into
+   * the bundled stylesheet eliminates the inline source entirely.
+   */
+  [x-cloak] {
+    display: none !important;
+  }
+
+  /* v3→v4 compat: v4's preflight defaults border-color to `currentColor`,
+   * where v3 defaulted it to gray-200. 127 bare `border` utilities across
+   * the templates relied on the v3 default, and flipping them to ink at
+   * port time would be a silent visual change in a step that is meant to
+   * have none. This is the upgrade guide's documented shim and it is
+   * TRANSITIONAL — M5.6.2 converts those borders to the semantic
+   * `border-line` token, and this block goes with the last one. */
+  *, ::after, ::before, ::backdrop, ::file-selector-button {
+    border-color: var(--color-gray-200, currentColor);
+  }
+
+  :root {
+    color-scheme: light dark;
+  }
+
+  html {
+    @apply antialiased;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11"; /* Inter ligature features */
+  }
+
+  html.dark {
+    @apply bg-zinc-950 text-zinc-100;
+  }
+  html:not(.dark) {
+    @apply bg-zinc-50 text-zinc-900;
+  }
+
+  body {
+    @apply min-h-screen font-sans;
+  }
+
+  /* Focus ring (Phase 10.5.2 — WCAG AA). The ring color is brand-400
+   * (contrast ≥ 3:1 against both zinc-50 light bg AND zinc-950 dark
+   * bg — checked via APCA + WCAG 2.1 SC 1.4.11). The ring-offset
+   * was zinc-950 only — that paints a thin black border on light-mode
+   * cards, which is fine but inconsistent with the surrounding
+   * surface. Light mode now uses zinc-50 offset; dark stays zinc-950
+   * so the ring reads as a true gap between the focused element and
+   * its background rather than a second visual outline. */
+  *:focus-visible {
+    /* v4 renamed v3's `outline-none` (transparent 2px outline, kept for
+     * forced-colors mode) to `outline-hidden`; v4's `outline-none` now
+     * really means `outline-style: none`, which would drop the
+     * high-contrast fallback. */
+    @apply outline-hidden ring-2 ring-brand-400 ring-offset-2 ring-offset-zinc-50;
+  }
+  html.dark *:focus-visible {
+    @apply ring-offset-zinc-950;
+  }
+
+  ::selection {
+    @apply bg-brand-500/30;
+  }
+
+  /* ----- Scrollbars -----
+   * The default is a ~17px chrome slab that ignores the theme: on the
+   * cream surface it reads as a grey seam beside the sidebar, and in
+   * dark mode Chromium paints it LIGHT, because `color-scheme: light
+   * dark` above hands the decision to the OS.
+   *
+   * Two mechanisms, because no single one covers every engine:
+   *   - `scrollbar-width`/`scrollbar-color` — the standard. Firefox and
+   *     Chromium 121+, which once these are set IGNORES the ::-webkit-
+   *     pseudo-elements entirely.
+   *   - `::-webkit-scrollbar` — Safari and older Chromium, and the only
+   *     way to get a rounded thumb and a hover state.
+   * Both resolve through --ink, so the thumb inverts with the theme and
+   * neither needs a `dark:` variant. `scrollbar-color` INHERITS, so
+   * setting it on html reaches every scroll container below — which is
+   * what lets the terminal-pane override further down work.
+   */
+  html {
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in srgb, var(--ink) 22%, transparent) transparent;
+  }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-corner { background: transparent; }
+  ::-webkit-scrollbar-thumb {
+    background: color-mix(in srgb, var(--ink) 22%, transparent);
+    border-radius: var(--radius-pill);
+    /* A transparent border plus padding-box clipping is the only way to
+       inset a thumb — it reads as a floating pill with the surface
+       showing through, not a full-bleed bar. */
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: color-mix(in srgb, var(--ink) 40%, transparent);
+    background-clip: padding-box;
+  }
+
+  /* ----- App shell type + surface -----
+   * Moved here from tokens.css in M5.6.0.2. These are RULES, and living
+   * in an unlayered stylesheet meant they beat every Tailwind utility
+   * regardless of source order — so `font-mono` on an <h2> silently lost
+   * to the heading rule below. Inside @layer base they behave: a utility
+   * on the element wins, which is what everyone expects. */
+  body.brain-ui {
+    background: var(--surface);
+    color: var(--ink);
+    font-family: var(--font-body);
+  }
+  body.brain-ui h1,
+  body.brain-ui h2,
+  body.brain-ui h3 {
+    font-family: var(--font-display);
+  }
+  body.brain-ui code,
+  body.brain-ui pre,
+  body.brain-ui .mono {
+    font-family: var(--font-mono);
+  }
+
+  /* Reduced-motion respect (Phase 10.5.6). Nukes animations +
+   * transitions and disables smooth-scroll behavior so a keyboard
+   * user with vestibular-disorder accommodations isn't pulled along
+   * for an animated scroll-into-view ride either. The 0.01ms (rather
+   * than 0ms) is the W3C-recommended escape hatch so JS animations
+   * driven by `transitionend` events still fire to completion — they
+   * just complete on the next frame. */
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto !important;
+    }
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+/* ----- Reusable component primitives ----- */
+@layer components {
+  /* ============================================================
+   * THE COMPONENT VOCABULARY (M5.6.1)
+   *
+   * The pages this replaces repeated the same eleven-class button string
+   * a dozen times, drifting a little each time: 13 copies of the primary
+   * button, 8 of the ghost, 15+ of the text input. "Professional" here
+   * mostly means CONSISTENT, and copy-paste does not survive contact
+   * with thirteen pages. So: raw utilities for layout, these for the
+   * repeated furniture.
+   *
+   * HARD RULE: components style against SEMANTIC tokens only —
+   * bg-surface, border-line, text-muted, bg-accent. Never a palette
+   * primitive, never a literal hex. A hardcoded colour is invisible in
+   * light-mode review and simply wrong in dark. The terminal panes at
+   * the bottom are the one deliberate exception; they are dark in both
+   * themes by design.
+   *
+   * v4 note: `@apply` takes utilities only, not other component classes,
+   * so shared bases are grouped selectors rather than `@apply btn`.
+   * ============================================================ */
+
+  /* ----- Buttons ----- */
+  .btn,
+  .btn-primary,
+  .btn-secondary,
+  .btn-ghost,
+  .btn-danger {
+    @apply inline-flex select-none items-center justify-center gap-2
+           rounded-control px-4 py-2 text-sm font-medium
+           transition-colors disabled:cursor-not-allowed disabled:opacity-55;
+  }
+  .btn-primary {
+    background: var(--accent);
+    color: var(--accent-contrast);
+  }
+  .btn-primary:hover:not(:disabled) { background: var(--accent-strong); }
+
+  /* `btn-secondary` is the outlined button. Kept as an alias of
+   * `btn-ghost` because the vendored docs/errors pages already use that
+   * name in 14 places; new code should reach for btn-ghost. */
+  .btn-secondary,
+  .btn-ghost {
+    border: 1px solid var(--line);
+    color: var(--ink);
+    background: transparent;
+  }
+  .btn-secondary:hover:not(:disabled),
+  .btn-ghost:hover:not(:disabled) {
+    border-color: color-mix(in srgb, var(--ink) 28%, transparent);
+    background: color-mix(in srgb, var(--ink) 4%, transparent);
+  }
+  .btn-danger {
+    background: var(--danger);
+    color: #fff;
+  }
+  .btn-danger:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--danger) 82%, black);
+  }
+  /* Destructive, but secondary in the visual hierarchy — an outlined
+   * button that only turns red on intent. */
+  .btn-danger-ghost {
+    @apply inline-flex select-none items-center justify-center gap-2
+           rounded-control px-4 py-2 text-sm font-medium transition-colors
+           disabled:cursor-not-allowed disabled:opacity-55;
+    border: 1px solid color-mix(in srgb, var(--danger) 45%, transparent);
+    color: var(--danger);
+    background: transparent;
+  }
+  .btn-danger-ghost:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--danger) 10%, transparent);
+  }
+  /* Solid ink button — the "commit / continue" action where the accent is
+   * already spoken for. text-surface, NOT text-white: --ink inverts to
+   * near-white in dark mode, so a literal white here is invisible exactly
+   * where nobody looks. (It was: measured 1.22:1 on the wizard's Continue
+   * and Settings' Save changes.) */
+  .btn-ink {
+    background: var(--ink);
+    color: var(--surface);
+  }
+  .btn-ink:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--ink) 85%, var(--surface));
+  }
+  /* Affirmative/destructive-adjacent action: approve a feed. */
+  .btn-signal {
+    background: var(--signal);
+    color: var(--surface);
+  }
+  .btn-signal:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--signal) 85%, black);
+  }
+  .btn-ink,
+  .btn-signal {
+    @apply inline-flex select-none items-center justify-center gap-2
+           rounded-control px-4 py-2 text-sm font-medium transition-colors
+           disabled:cursor-not-allowed disabled:opacity-55;
+  }
+
+  .btn-sm { @apply gap-1.5 px-3 py-1.5 text-xs; }
+  .btn-lg { @apply px-6 py-2.5; }
+  .btn-block { @apply w-full; }
+
+  /* ----- Cards ----- */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-card);
+    box-shadow: var(--shadow-soft);
+  }
+  .card-header {
+    @apply flex items-center justify-between gap-3 px-4 py-3;
+    border-bottom: 1px solid var(--line);
+  }
+  .card-title {
+    @apply text-sm font-semibold;
+    font-family: var(--font-display);
+  }
+  .card-body { @apply p-4; }
+  .card-footer {
+    @apply flex flex-wrap items-center gap-2 px-4 py-3;
+    border-top: 1px solid var(--line);
+  }
+  /* A card row in a stacked list: last one carries no divider. */
+  .card-row {
+    @apply px-4 py-3;
+    border-bottom: 1px solid var(--line);
+  }
+  .card-row:last-child { border-bottom: 0; }
+
+  /* ----- Tables -----
+   * Wrap in `.table-wrap` so a wide table scrolls itself instead of
+   * pushing the page sideways. */
+  .table-wrap { @apply w-full overflow-x-auto; }
+  .table { @apply w-full text-sm; border-collapse: collapse; }
+  .table th {
+    @apply px-3 py-2 text-start text-xs font-medium uppercase tracking-wide;
+    color: var(--muted);
+    border-bottom: 1px solid var(--line);
+    white-space: nowrap;
+  }
+  .table td {
+    @apply px-3 py-2 align-top;
+    border-bottom: 1px solid var(--line);
+  }
+  .table tbody tr:last-child td { border-bottom: 0; }
+  .table-hover tbody tr:hover td {
+    background: color-mix(in srgb, var(--ink) 3%, transparent);
+  }
+  .table-fixed-head thead th {
+    @apply sticky top-0 z-10;
+    background: var(--surface);
+  }
+
+  /* ----- Badges ----- */
+  .badge {
+    @apply inline-flex items-center gap-1.5 rounded-pill px-2 py-0.5
+           text-xs font-medium;
+    border: 1px solid transparent;
+  }
+  /* Tinted fill + the readable text variant. Deliberately NOT
+   * `color: var(--signal)` — the fill colours fail contrast as text. */
+  .badge-ok {
+    background: color-mix(in srgb, var(--signal) 16%, transparent);
+    border-color: color-mix(in srgb, var(--signal) 40%, transparent);
+    color: var(--signal-ink);
+  }
+  .badge-warn {
+    background: color-mix(in srgb, var(--warn) 22%, transparent);
+    border-color: color-mix(in srgb, var(--warn) 55%, transparent);
+    color: var(--warn-ink);
+  }
+  .badge-danger {
+    background: color-mix(in srgb, var(--danger) 14%, transparent);
+    border-color: color-mix(in srgb, var(--danger) 42%, transparent);
+    color: var(--danger-ink);
+  }
+  .badge-info {
+    background: color-mix(in srgb, var(--accent) 14%, transparent);
+    border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+    color: color-mix(in srgb, var(--accent) 72%, var(--ink));
+  }
+  .badge-muted {
+    background: color-mix(in srgb, var(--ink) 6%, transparent);
+    border-color: var(--line);
+    color: var(--muted);
+  }
+  /* The private tier: protected, not broken. Red implies a problem;
+   * ink matches the rings' private core. */
+  .badge-ink {
+    background: color-mix(in srgb, var(--ink) 9%, transparent);
+    border-color: color-mix(in srgb, var(--ink) 35%, transparent);
+    color: var(--ink);
+  }
+
+  /* ----- Status dots ----- */
+  .dot { @apply inline-block h-2 w-2 shrink-0 rounded-pill; }
+  .dot-ok     { background: var(--signal); }
+  .dot-warn   { background: var(--warn); }
+  .dot-danger { background: var(--danger); }
+  .dot-info   { background: var(--accent); }
+  .dot-muted  { background: var(--muted); }
+  .dot-live   { @apply animate-pulse; background: var(--accent); }
+
+  /* ----- Form fields ----- */
+  .field { @apply block; }
+  .field-label {
+    @apply mb-1 block text-sm font-medium;
+    color: var(--ink);
+  }
+  .field-input,
+  .field-textarea,
+  .field-select {
+    @apply block w-full rounded-control px-3 py-2 text-sm;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    color: var(--ink);
+    font-family: var(--font-body);
+  }
+  .field-input:focus,
+  .field-textarea:focus,
+  .field-select:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+  }
+  .field-input::placeholder,
+  .field-textarea::placeholder { color: var(--muted); }
+  .field-mono { font-family: var(--font-mono); }
+  .field-hint { @apply mt-1 text-xs; color: var(--muted); }
+  .field-error { @apply mt-1 text-xs; color: var(--danger); }
+
+  /* ----- Stat tiles ----- */
+  .stat-tile {
+    @apply flex flex-col gap-1 p-4;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-card);
+    box-shadow: var(--shadow-soft);
+  }
+  .stat-value {
+    @apply text-2xl font-semibold leading-none;
+    font-family: var(--font-display);
+    /* Digits on a grid: values in a KPI row line up and don't jitter
+       when they tick over. */
+    font-variant-numeric: tabular-nums;
+  }
+  .stat-label {
+    @apply text-xs uppercase tracking-wide;
+    color: var(--muted);
+  }
+
+  /* ----- Notices (inline callouts) ----- */
+  .notice {
+    @apply rounded-control px-4 py-3 text-sm;
+    border: 1px solid var(--line);
+    background: var(--surface);
+  }
+  .notice-ok {
+    border-color: color-mix(in srgb, var(--signal) 45%, transparent);
+    background: color-mix(in srgb, var(--signal) 10%, transparent);
+  }
+  .notice-warn {
+    border-color: color-mix(in srgb, var(--warn) 55%, transparent);
+    background: color-mix(in srgb, var(--warn) 14%, transparent);
+  }
+  .notice-danger {
+    border-color: color-mix(in srgb, var(--danger) 45%, transparent);
+    background: color-mix(in srgb, var(--danger) 9%, transparent);
+  }
+
+  /* ----- Definition grid (the "what this server knows" pattern) ----- */
+  .meta-grid { @apply grid gap-x-6 gap-y-2 text-sm sm:grid-cols-2; }
+  .meta-label { @apply text-xs; color: var(--muted); }
+  .meta-value { font-family: var(--font-mono); word-break: break-word; }
+
+  /* ----- Page furniture ----- */
+  .page-title {
+    @apply text-2xl font-semibold tracking-tight;
+    font-family: var(--font-display);
+  }
+  .page-subtitle { @apply mt-1 text-sm; color: var(--muted); }
+  .section-title {
+    @apply mb-2 mt-8 text-sm font-medium;
+    color: var(--muted);
+  }
+  .link-accent {
+    color: var(--accent);
+    text-decoration: underline;
+  }
+  .link-accent:hover { color: var(--accent-strong); }
+
+  /* ----- Unified-diff lines (feed proposals) -----
+   * These live inside a `pane-terminal`, so like it they are fixed across
+   * both themes and reference the terminal scale rather than the semantic
+   * one. Tints follow the familiar green-add / red-remove convention at
+   * low alpha so the code stays readable on the dark pane. */
+  .diff-line { @apply px-4; }
+  .diff-add  { background: rgba(46, 160, 67, 0.2); }
+  .diff-del  { background: rgba(248, 81, 73, 0.2); }
+  .diff-hunk { color: var(--c-ink-400); }
+
+  /* ----- Sidebar nav items -----
+   * `nav-item-active` is styled here and emitted by the template from
+   * `item.active`; nav.py starts setting that flag in M5.6.3, which is
+   * when the sidebar finally shows where you are. */
+  .nav-item {
+    @apply flex items-center gap-2.5 rounded-control px-2.5 py-2 text-sm;
+    color: var(--ink);
+  }
+  .nav-item:hover {
+    background: color-mix(in srgb, var(--ink) 5%, transparent);
+  }
+  .nav-item-active {
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+    color: var(--accent);
+    font-weight: 500;
+  }
+  /* Icons sit quieter than their labels until the row earns attention:
+   * muted at rest, ink on hover, accent when active (kept through
+   * hover — the later rule outranks the hover one on purpose). */
+  .nav-item .nav-icon {
+    @apply shrink-0;
+    color: var(--muted);
+  }
+  .nav-item:hover .nav-icon {
+    color: var(--ink);
+  }
+  .nav-item-active .nav-icon,
+  .nav-item-active:hover .nav-icon {
+    color: var(--accent);
+  }
+
+  /* ----- Drawer scrim -----
+   * Like the terminal panes, a deliberate exception to "semantic tokens
+   * only": a scrim is dark in BOTH themes by design (--ink would flip
+   * to near-white in dark mode and wash the screen instead of dimming
+   * it). Sits under the sidebar (z-40) and over the sticky topbar. */
+  .scrim {
+    @apply fixed inset-0 lg:hidden;
+    /* Between the sticky topbar (30) and the sidebar drawer (40). */
+    z-index: 35;
+    background: rgba(0, 0, 0, 0.45);
+  }
+
+  /* ----- Sparkline (stat tiles) -----
+   * Geometry comes pre-baked from the view as polyline points in a
+   * 100×28 viewBox; preserveAspectRatio=none stretches it to the tile
+   * and non-scaling-stroke keeps the line hairline-crisp. */
+  .spark {
+    display: block;
+    width: 100%;
+    height: 28px;
+  }
+  .spark-line {
+    fill: none;
+    stroke: var(--accent);
+    stroke-width: 1.5;
+    stroke-linejoin: round;
+    stroke-linecap: round;
+    vector-effect: non-scaling-stroke;
+  }
+
+  /* ----- Entity-kind colours -----
+   * One class per kind carries the categorical colour as a custom
+   * property; bars, dots, ring dots and legend swatches all read
+   * --kind-color, so two views of the same kind can never disagree.
+   * Values are the validated --viz-* tokens (tokens.css, both themes).
+   * Lived in rings.css originally; promoted here so every page gets
+   * them without loading the rings bundle. */
+  .viz-kind-identity { --kind-color: var(--viz-identity); }
+  .viz-kind-project  { --kind-color: var(--viz-project); }
+  .viz-kind-take     { --kind-color: var(--viz-take); }
+  .viz-kind-story    { --kind-color: var(--viz-story); }
+  .viz-kind-lesson   { --kind-color: var(--viz-lesson); }
+  .viz-kind-fact     { --kind-color: var(--viz-fact); }
+  .viz-kind-lens     { --kind-color: var(--viz-lens); }
+  .viz-kind-catalog  { --kind-color: var(--viz-catalog); }
+
+  /* Kind-coloured dot (pairs with the .dot base class). */
+  .dot-kind {
+    background: var(--kind-color, var(--muted));
+  }
+
+  /* Kind-coloured micro-bar (entity mix and ranked lists). Falls back
+   * to the accent for rows with no kind class. */
+  .viz-bar {
+    fill: var(--kind-color, var(--accent));
+    opacity: 0.75;
+  }
+
+  /* ----- Empty state ----- */
+  .empty-state {
+    @apply flex flex-col items-center justify-center gap-2 px-6 py-12 text-center;
+    color: var(--muted);
+    border: 1px dashed var(--line);
+    border-radius: var(--radius-card);
+  }
+  .empty-state-title {
+    @apply text-sm font-medium;
+    color: var(--ink);
+  }
+  .container-app {
+    @apply mx-auto max-w-6xl px-6;
+  }
+
+  /* ----- Landing page (templates/home.html) ----- */
+  .brain-ui .home-title {
+    font-family: var(--font-display);
+    color: var(--ink);
+  }
+  .brain-ui .home-sub { color: var(--muted); }
+  .brain-ui .home-cta {
+    background: var(--accent);
+    color: var(--accent-contrast);
+    border-radius: var(--radius-pill);
+    box-shadow: var(--shadow-soft);
+    transition: background 0.15s ease;
+  }
+  .brain-ui .home-cta:hover { background: var(--accent-strong); }
+  .brain-ui .home-hero-img {
+    filter: drop-shadow(0 12px 32px color-mix(in srgb, var(--accent) 25%, transparent));
+  }
+
+  /* ----- Login card (templates/login.html) ----- */
+  .brain-ui .login-card {
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-card);
+    box-shadow: var(--shadow-card);
+  }
+  .brain-ui .login-input {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-control);
+    color: var(--ink);
+    font-family: var(--font-body);
+  }
+  .brain-ui .login-input:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+  }
+  .brain-ui .login-error {
+    background: color-mix(in srgb, var(--danger) 10%, transparent);
+    border: 1px solid color-mix(in srgb, var(--danger) 40%, transparent);
+    border-radius: var(--radius-control);
+    color: color-mix(in srgb, var(--danger) 70%, black);
+  }
+
+  /* ----- Dark terminal pane — logs, code, raw output -----
+   * The deliberate exception to "style against semantic tokens": a
+   * terminal pane is dark in BOTH themes, so it points at the fixed
+   * terminal scale rather than at --surface. */
+  .brain-ui .pane-terminal {
+    background: var(--c-ink-900);
+    color: var(--c-ink-300);
+    border: 1px solid var(--c-ink-700);
+    border-radius: var(--radius-control);
+    font-family: var(--font-mono);
+  }
+  /* The pane is dark in BOTH themes, so the inherited --ink thumb is
+     wrong in light mode — a near-black pill on a near-black pane. These
+     point at the fixed terminal scale like the pane itself does. */
+  .brain-ui .pane-terminal {
+    scrollbar-color: var(--c-ink-600) transparent;
+  }
+  .brain-ui .pane-terminal::-webkit-scrollbar-thumb {
+    background: var(--c-ink-600);
+    background-clip: padding-box;
+  }
+  .brain-ui .pane-terminal::-webkit-scrollbar-thumb:hover {
+    background: var(--c-ink-400);
+    background-clip: padding-box;
+  }
+
+  /* Markdown tables arrive from the guide renderer with no wrapper to
+     scroll inside — nothing to hang `.table-wrap` on — so a 5-column
+     table sets a min-content floor and pushes the whole PAGE sideways
+     on a phone (the auth guide measured 380px at a 375 viewport).
+     `display: block` is the standard fix: the table becomes its own
+     scroll box, so the overflow stays inside the table where the
+     reader expects it. */
+  .prose table {
+    display: block;
+    max-width: 100%;
+    overflow-x: auto;
+  }
+
+  /* Code-block container — wraps Pygments-highlighted fenced blocks
+     from the codehilite extension. The `.highlight` div is the outer
+     wrap; colored token spans live inside `pre code`. We neutralize
+     Tailwind typography's default `pre` styling so the Pygments
+     style provides the surface. The header strip carries the
+     language label + copy button so they don't overlap the code. */
+  .prose .highlight {
+    @apply relative my-6 rounded-lg border border-zinc-200 dark:border-zinc-800 overflow-hidden;
+  }
+  .prose .highlight pre {
+    @apply m-0 px-4 py-4 overflow-x-auto bg-transparent text-sm leading-relaxed;
+    color: inherit;
+  }
+  .prose .highlight code {
+    @apply bg-transparent p-0 text-sm font-mono font-normal;
+    color: inherit;
+  }
+  /* Was: `.prose .highlight code::before { content: none }`. That rule
+     never did anything — see the @layer utilities block below for why —
+     and the effect it was credited with actually comes from the
+     typography plugin's own `:where(pre code)` reset. Removed rather
+     than left as decoration. */
+
+  /* Header strip: language label (left) + copy button (right). The
+     JS prepends this to `.highlight`. Hidden when empty (no language
+     resolved and copy disabled) via the `hidden` class. */
+  .code-toolbar {
+    @apply absolute inset-x-0 top-0 z-10 flex items-center justify-between
+           px-3 py-1.5 text-[11px] font-medium tracking-wide uppercase
+           text-zinc-500 dark:text-zinc-400 pointer-events-none;
+  }
+  .code-toolbar > * {
+    @apply pointer-events-auto;
+  }
+  .code-toolbar .code-lang {
+    @apply font-mono normal-case tracking-normal;
+  }
+  /* Push code down so the toolbar doesn't overlap the first line. */
+  .prose .highlight pre {
+    @apply pt-9;
+  }
+
+  /* Copy button — icon-only resting state, slight surface on hover,
+     turns brand-green on success. Always interactive (no opacity:0
+     trick — discoverability matters more than minimalism here). */
+  .code-copy-btn {
+    @apply inline-flex h-7 w-7 items-center justify-center rounded-md
+           text-zinc-500 transition
+           hover:bg-zinc-100 hover:text-zinc-900
+           focus-visible:bg-zinc-100 focus-visible:text-zinc-900
+           dark:text-zinc-400
+           dark:hover:bg-zinc-800 dark:hover:text-zinc-100
+           dark:focus-visible:bg-zinc-800 dark:focus-visible:text-zinc-100;
+  }
+  .code-copy-btn svg {
+    @apply h-4 w-4;
+  }
+  .code-copy-btn .icon-check {
+    display: none;
+  }
+  .code-copy-btn[data-copied="true"] {
+    @apply text-brand-600 dark:text-brand-400;
+  }
+  .code-copy-btn[data-copied="true"] .icon-copy {
+    display: none;
+  }
+  .code-copy-btn[data-copied="true"] .icon-check {
+    display: inline-block;
+  }
+}
+
+/* ----- Overrides of the typography plugin -------------------------------
+ *
+ * These MUST live in `utilities`, not `components`, and that is the whole
+ * point of this block. The typography plugin emits its `prose` rules into
+ * the utilities layer; a later layer beats an earlier one no matter how
+ * specific the earlier selector is. The override below is (0,1,2) against
+ * the plugin's (0,1,1) — it still lost silently for as long as it sat in
+ * `components`, which is where the obvious place to put it is.
+ *
+ * What it fixes: the plugin decorates every inline <code> with a literal
+ * backtick before and after, so rendered markdown reads `/api/v1/*` in
+ * the guides and the endpoint catalog shows `assemble-context`. The
+ * backticks were markdown SOURCE syntax; the text already became a <code>
+ * element, and printing them again is just wrong. (The plugin resets its
+ * own decoration for `pre code`, which is why fenced blocks always looked
+ * right and inline spans did not.)
+ */
+@layer utilities {
+  .prose code::before,
+  .prose code::after {
+    content: none;
+  }
+
+  /* The same trap, and this one was an accessibility bug: the plugin
+     paints `pre` text zinc-200 because it assumes ITS pre background
+     (zinc-800). We make that background transparent so the Pygments
+     theme shows through — which in LIGHT mode is #f8f8f8, leaving code
+     samples at a measured 1.19:1. The `color: inherit` meant to fix it
+     has been sitting in `components`, losing to the plugin, since the
+     docs shipped; dark mode hid it because `html.dark .highlight` sets
+     a colour explicitly. */
+  .prose .highlight pre,
+  .prose .highlight code {
+    color: inherit;
+  }
+}
+
+/* ----- Pygments syntax highlighting (generated) ----- */
+/* Light theme: Pygments 'default'. Dark theme: 'monokai'. */
+.highlight pre { background: transparent; }
+pre { line-height: 125%; }
+td.linenos .normal { color: inherit; background-color: transparent; padding-left: 5px; padding-right: 5px; }
+span.linenos { color: inherit; background-color: transparent; padding-left: 5px; padding-right: 5px; }
+td.linenos .special { color: #000000; background-color: #ffffc0; padding-left: 5px; padding-right: 5px; }
+span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 5px; padding-right: 5px; }
+.highlight .hll { background-color: #ffffcc }
+.highlight { background: #f8f8f8; }
+.highlight .c { color: #3D7B7B; font-style: italic } /* Comment */
+.highlight .err { border: 1px solid #F00 } /* Error */
+.highlight .k { color: #008000; font-weight: bold } /* Keyword */
+.highlight .o { color: #666 } /* Operator */
+.highlight .ch { color: #3D7B7B; font-style: italic } /* Comment.Hashbang */
+.highlight .cm { color: #3D7B7B; font-style: italic } /* Comment.Multiline */
+.highlight .cp { color: #9C6500 } /* Comment.Preproc */
+.highlight .cpf { color: #3D7B7B; font-style: italic } /* Comment.PreprocFile */
+.highlight .c1 { color: #3D7B7B; font-style: italic } /* Comment.Single */
+.highlight .cs { color: #3D7B7B; font-style: italic } /* Comment.Special */
+.highlight .gd { color: #A00000 } /* Generic.Deleted */
+.highlight .ge { font-style: italic } /* Generic.Emph */
+.highlight .ges { font-weight: bold; font-style: italic } /* Generic.EmphStrong */
+.highlight .gr { color: #E40000 } /* Generic.Error */
+.highlight .gh { color: #000080; font-weight: bold } /* Generic.Heading */
+.highlight .gi { color: #008400 } /* Generic.Inserted */
+.highlight .go { color: #717171 } /* Generic.Output */
+.highlight .gp { color: #000080; font-weight: bold } /* Generic.Prompt */
+.highlight .gs { font-weight: bold } /* Generic.Strong */
+.highlight .gu { color: #800080; font-weight: bold } /* Generic.Subheading */
+.highlight .gt { color: #04D } /* Generic.Traceback */
+.highlight .kc { color: #008000; font-weight: bold } /* Keyword.Constant */
+.highlight .kd { color: #008000; font-weight: bold } /* Keyword.Declaration */
+.highlight .kn { color: #008000; font-weight: bold } /* Keyword.Namespace */
+.highlight .kp { color: #008000 } /* Keyword.Pseudo */
+.highlight .kr { color: #008000; font-weight: bold } /* Keyword.Reserved */
+.highlight .kt { color: #B00040 } /* Keyword.Type */
+.highlight .m { color: #666 } /* Literal.Number */
+.highlight .s { color: #BA2121 } /* Literal.String */
+.highlight .na { color: #687822 } /* Name.Attribute */
+.highlight .nb { color: #008000 } /* Name.Builtin */
+.highlight .nc { color: #00F; font-weight: bold } /* Name.Class */
+.highlight .no { color: #800 } /* Name.Constant */
+.highlight .nd { color: #A2F } /* Name.Decorator */
+.highlight .ni { color: #717171; font-weight: bold } /* Name.Entity */
+.highlight .ne { color: #CB3F38; font-weight: bold } /* Name.Exception */
+.highlight .nf { color: #00F } /* Name.Function */
+.highlight .nl { color: #767600 } /* Name.Label */
+.highlight .nn { color: #00F; font-weight: bold } /* Name.Namespace */
+.highlight .nt { color: #008000; font-weight: bold } /* Name.Tag */
+.highlight .nv { color: #19177C } /* Name.Variable */
+.highlight .ow { color: #A2F; font-weight: bold } /* Operator.Word */
+.highlight .w { color: #BBB } /* Text.Whitespace */
+.highlight .mb { color: #666 } /* Literal.Number.Bin */
+.highlight .mf { color: #666 } /* Literal.Number.Float */
+.highlight .mh { color: #666 } /* Literal.Number.Hex */
+.highlight .mi { color: #666 } /* Literal.Number.Integer */
+.highlight .mo { color: #666 } /* Literal.Number.Oct */
+.highlight .sa { color: #BA2121 } /* Literal.String.Affix */
+.highlight .sb { color: #BA2121 } /* Literal.String.Backtick */
+.highlight .sc { color: #BA2121 } /* Literal.String.Char */
+.highlight .dl { color: #BA2121 } /* Literal.String.Delimiter */
+.highlight .sd { color: #BA2121; font-style: italic } /* Literal.String.Doc */
+.highlight .s2 { color: #BA2121 } /* Literal.String.Double */
+.highlight .se { color: #AA5D1F; font-weight: bold } /* Literal.String.Escape */
+.highlight .sh { color: #BA2121 } /* Literal.String.Heredoc */
+.highlight .si { color: #A45A77; font-weight: bold } /* Literal.String.Interpol */
+.highlight .sx { color: #008000 } /* Literal.String.Other */
+.highlight .sr { color: #A45A77 } /* Literal.String.Regex */
+.highlight .s1 { color: #BA2121 } /* Literal.String.Single */
+.highlight .ss { color: #19177C } /* Literal.String.Symbol */
+.highlight .bp { color: #008000 } /* Name.Builtin.Pseudo */
+.highlight .fm { color: #00F } /* Name.Function.Magic */
+.highlight .vc { color: #19177C } /* Name.Variable.Class */
+.highlight .vg { color: #19177C } /* Name.Variable.Global */
+.highlight .vi { color: #19177C } /* Name.Variable.Instance */
+.highlight .vm { color: #19177C } /* Name.Variable.Magic */
+.highlight .il { color: #666 } /* Literal.Number.Integer.Long */
+pre { line-height: 125%; }
+td.linenos .normal { color: inherit; background-color: transparent; padding-left: 5px; padding-right: 5px; }
+span.linenos { color: inherit; background-color: transparent; padding-left: 5px; padding-right: 5px; }
+td.linenos .special { color: #000000; background-color: #ffffc0; padding-left: 5px; padding-right: 5px; }
+span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 5px; padding-right: 5px; }
+html.dark .highlight .hll { background-color: #49483e }
+html.dark .highlight { background: #272822; color: #F8F8F2 }
+html.dark .highlight .c { color: #959077 } /* Comment */
+html.dark .highlight .err { color: #ED007E; background-color: #1E0010 } /* Error */
+html.dark .highlight .esc { color: #F8F8F2 } /* Escape */
+html.dark .highlight .g { color: #F8F8F2 } /* Generic */
+html.dark .highlight .k { color: #66D9EF } /* Keyword */
+html.dark .highlight .l { color: #AE81FF } /* Literal */
+html.dark .highlight .n { color: #F8F8F2 } /* Name */
+html.dark .highlight .o { color: #FF4689 } /* Operator */
+html.dark .highlight .x { color: #F8F8F2 } /* Other */
+html.dark .highlight .p { color: #F8F8F2 } /* Punctuation */
+html.dark .highlight .ch { color: #959077 } /* Comment.Hashbang */
+html.dark .highlight .cm { color: #959077 } /* Comment.Multiline */
+html.dark .highlight .cp { color: #959077 } /* Comment.Preproc */
+html.dark .highlight .cpf { color: #959077 } /* Comment.PreprocFile */
+html.dark .highlight .c1 { color: #959077 } /* Comment.Single */
+html.dark .highlight .cs { color: #959077 } /* Comment.Special */
+html.dark .highlight .gd { color: #FF4689 } /* Generic.Deleted */
+html.dark .highlight .ge { color: #F8F8F2; font-style: italic } /* Generic.Emph */
+html.dark .highlight .ges { color: #F8F8F2; font-weight: bold; font-style: italic } /* Generic.EmphStrong */
+html.dark .highlight .gr { color: #F8F8F2 } /* Generic.Error */
+html.dark .highlight .gh { color: #F8F8F2 } /* Generic.Heading */
+html.dark .highlight .gi { color: #A6E22E } /* Generic.Inserted */
+html.dark .highlight .go { color: #66D9EF } /* Generic.Output */
+html.dark .highlight .gp { color: #FF4689; font-weight: bold } /* Generic.Prompt */
+html.dark .highlight .gs { color: #F8F8F2; font-weight: bold } /* Generic.Strong */
+html.dark .highlight .gu { color: #959077 } /* Generic.Subheading */
+html.dark .highlight .gt { color: #F8F8F2 } /* Generic.Traceback */
+html.dark .highlight .kc { color: #66D9EF } /* Keyword.Constant */
+html.dark .highlight .kd { color: #66D9EF } /* Keyword.Declaration */
+html.dark .highlight .kn { color: #FF4689 } /* Keyword.Namespace */
+html.dark .highlight .kp { color: #66D9EF } /* Keyword.Pseudo */
+html.dark .highlight .kr { color: #66D9EF } /* Keyword.Reserved */
+html.dark .highlight .kt { color: #66D9EF } /* Keyword.Type */
+html.dark .highlight .ld { color: #E6DB74 } /* Literal.Date */
+html.dark .highlight .m { color: #AE81FF } /* Literal.Number */
+html.dark .highlight .s { color: #E6DB74 } /* Literal.String */
+html.dark .highlight .na { color: #A6E22E } /* Name.Attribute */
+html.dark .highlight .nb { color: #F8F8F2 } /* Name.Builtin */
+html.dark .highlight .nc { color: #A6E22E } /* Name.Class */
+html.dark .highlight .no { color: #66D9EF } /* Name.Constant */
+html.dark .highlight .nd { color: #A6E22E } /* Name.Decorator */
+html.dark .highlight .ni { color: #F8F8F2 } /* Name.Entity */
+html.dark .highlight .ne { color: #A6E22E } /* Name.Exception */
+html.dark .highlight .nf { color: #A6E22E } /* Name.Function */
+html.dark .highlight .nl { color: #F8F8F2 } /* Name.Label */
+html.dark .highlight .nn { color: #F8F8F2 } /* Name.Namespace */
+html.dark .highlight .nx { color: #A6E22E } /* Name.Other */
+html.dark .highlight .py { color: #F8F8F2 } /* Name.Property */
+html.dark .highlight .nt { color: #FF4689 } /* Name.Tag */
+html.dark .highlight .nv { color: #F8F8F2 } /* Name.Variable */
+html.dark .highlight .ow { color: #FF4689 } /* Operator.Word */
+html.dark .highlight .pm { color: #F8F8F2 } /* Punctuation.Marker */
+html.dark .highlight .w { color: #F8F8F2 } /* Text.Whitespace */
+html.dark .highlight .mb { color: #AE81FF } /* Literal.Number.Bin */
+html.dark .highlight .mf { color: #AE81FF } /* Literal.Number.Float */
+html.dark .highlight .mh { color: #AE81FF } /* Literal.Number.Hex */
+html.dark .highlight .mi { color: #AE81FF } /* Literal.Number.Integer */
+html.dark .highlight .mo { color: #AE81FF } /* Literal.Number.Oct */
+html.dark .highlight .sa { color: #E6DB74 } /* Literal.String.Affix */
+html.dark .highlight .sb { color: #E6DB74 } /* Literal.String.Backtick */
+html.dark .highlight .sc { color: #E6DB74 } /* Literal.String.Char */
+html.dark .highlight .dl { color: #E6DB74 } /* Literal.String.Delimiter */
+html.dark .highlight .sd { color: #E6DB74 } /* Literal.String.Doc */
+html.dark .highlight .s2 { color: #E6DB74 } /* Literal.String.Double */
+html.dark .highlight .se { color: #AE81FF } /* Literal.String.Escape */
+html.dark .highlight .sh { color: #E6DB74 } /* Literal.String.Heredoc */
+html.dark .highlight .si { color: #E6DB74 } /* Literal.String.Interpol */
+html.dark .highlight .sx { color: #E6DB74 } /* Literal.String.Other */
+html.dark .highlight .sr { color: #E6DB74 } /* Literal.String.Regex */
+html.dark .highlight .s1 { color: #E6DB74 } /* Literal.String.Single */
+html.dark .highlight .ss { color: #E6DB74 } /* Literal.String.Symbol */
+html.dark .highlight .bp { color: #F8F8F2 } /* Name.Builtin.Pseudo */
+html.dark .highlight .fm { color: #A6E22E } /* Name.Function.Magic */
+html.dark .highlight .vc { color: #F8F8F2 } /* Name.Variable.Class */
+html.dark .highlight .vg { color: #F8F8F2 } /* Name.Variable.Global */
+html.dark .highlight .vi { color: #F8F8F2 } /* Name.Variable.Instance */
+html.dark .highlight .vm { color: #F8F8F2 } /* Name.Variable.Magic */
+html.dark .highlight .il { color: #AE81FF } /* Literal.Number.Integer.Long */
+/* ----- /Pygments ----- */
+
+/* ----- Phase F9.C — RTL icon overrides ---------------------------------
+ *
+ * The bulk of the UI relies on Tailwind logical properties (`ms-`/`me-`/
+ * `ps-`/`pe-`/`start-`/`end-`/`text-start`/`text-end`/`border-s`/`border-e`/
+ * `rounded-s`/`rounded-e`) so flipping `<html dir="rtl">` mirrors the
+ * layout automatically with zero per-template work.
+ *
+ * What does NOT auto-mirror is decorative SVG iconography that encodes
+ * direction in its path (play arrows, chevron-right "next", external-link
+ * pointers, the rose impersonation-banner caret, etc.). The `.rtl-mirror`
+ * hook below is the opt-in for templates that need a specific icon flipped
+ * in RTL — add the class to the offending <svg> element:
+ *
+ *   <svg class="rtl-mirror" ...>
+ *
+ * Templates that mark up arrows inside `{% trans %}` strings (e.g.
+ * "← Back" or "Continue →") rely on translators substituting the correct
+ * glyph for their script; the literal arrow character is part of the
+ * source-language string and stays correctly oriented post-translation
+ * because RTL fluent translators write it as → or ← per the script's
+ * convention, not the source's.
+ *
+ * The CSS itself is opt-in and zero-cost when the page is LTR — no
+ * selector matches if `<html dir="ltr">` (the default).
+ */
+html[dir="rtl"] .rtl-mirror {
+  transform: scaleX(-1);
+}
+/* ----- /RTL icon overrides ----- */

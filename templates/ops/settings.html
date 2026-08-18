@@ -1,0 +1,277 @@
+{% extends "ops/_layout.html" %}
+
+{% block page_title_tag %}Settings{% endblock %}
+{% block page_title %}Settings{% endblock %}
+{% block page_subtitle %}
+  <p class="mt-1 text-sm text-muted">
+    App name, Claude credential, models and budgets. Values save encrypted
+    to the database; secrets are write-only.
+  </p>
+{% endblock %}
+{% block content_width %}max-w-[1600px]{% endblock %}
+
+{% comment %}
+  Test connection lives on the title line (the dashboard's sync-chip slot):
+  it is the page's one action on the world, and keeping its <form> out of
+  the big save <form> below avoids illegal nesting. The hidden input — not
+  the button's name/value — carries the action, so disabling the submitter
+  while the ping runs cannot drop it from the POST (the Alpine gotcha).
+{% endcomment %}
+{% block page_actions %}
+  <div class="flex flex-wrap items-center gap-3">
+    <span class="badge badge-muted">SDK spend today · <span class="font-mono">${{ today_cost|floatformat:4 }}</span></span>
+    <form method="post" x-data="{busy: false}" @submit="setTimeout(() => busy = true)">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="test_connection" />
+      <button type="submit" class="btn-primary" :disabled="busy">Test connection</button>
+    </form>
+  </div>
+{% endblock %}
+
+{% block content %}
+  {% if test_result %}
+    <div class="notice mb-4 xl:mb-6 {% if test_result.ok %}notice-ok{% else %}notice-danger{% endif %}">
+      {% if test_result.ok %}
+        <div class="font-semibold text-signal-ink">Connection OK</div>
+        <dl class="mt-2 grid grid-cols-2 gap-x-6 gap-y-1 font-mono text-sm sm:grid-cols-4">
+          <div><dt class="text-xs text-muted">model</dt><dd>{{ test_result.model }}</dd></div>
+          <div><dt class="text-xs text-muted">latency</dt><dd>{{ test_result.duration_ms }} ms</dd></div>
+          <div><dt class="text-xs text-muted">tokens in/out</dt><dd>{{ test_result.input_tokens }}/{{ test_result.output_tokens }}</dd></div>
+          <div><dt class="text-xs text-muted">cost</dt><dd>${{ test_result.cost_usd|floatformat:4 }}</dd></div>
+        </dl>
+        <div class="mt-2 text-sm text-muted">reply: “{{ test_result.text }}” · logged as op #{{ test_result.operation_id }}</div>
+      {% else %}
+        <div class="font-semibold text-danger-ink">Connection failed</div>
+        <div class="mt-1 font-mono text-sm">{{ test_result.error }}</div>
+        {% if test_result.operation_id %}
+          <div class="mt-1 text-sm text-muted">logged as op #{{ test_result.operation_id }}</div>
+        {% endif %}
+      {% endif %}
+    </div>
+  {% endif %}
+
+  {% comment %}
+    One form, three cards: the registry grouped by what the operator is
+    doing (branding / the SDK loop / the git side). Grouping is computed
+    in the view; a key missing from its map still renders in a trailing
+    "Other settings" card, and _save iterates the registry, so nothing
+    can silently drop out of either path.
+
+    Row anatomy replaces the old 4-column <table>, whose nowrap header
+    forced an 858px floor at a 375px viewport. Zones stack below xl
+    (tiny eyebrow labels appear in place of the lost column headers);
+    at xl they line up 5/4/3 on the 12-col grid. min-w-0 on every zone
+    so a long mono value (the repo URL) breaks instead of widening the
+    track — .meta-value carries the word-break.
+  {% endcomment %}
+  <form method="post" class="space-y-4 xl:space-y-6" x-data="{saving: false}" @submit="setTimeout(() => saving = true)">
+    {% csrf_token %}
+    {% for section in sections %}
+      <section class="card">
+        <div class="card-header">
+          <h2 class="card-title">{{ section.title }}</h2>
+          {% if section.note %}<span class="text-xs text-muted">{{ section.note }}</span>{% endif %}
+        </div>
+        {% for row in section.rows %}
+          <div class="card-row grid gap-x-6 gap-y-3 xl:grid-cols-12">
+            <div class="min-w-0 xl:col-span-5">
+              <label class="text-sm font-medium" for="value__{{ row.spec.key }}">{{ row.spec.label }}</label>
+              <div class="mt-0.5 font-mono text-xs text-muted">{{ row.spec.key }}</div>
+              <p class="mt-1.5 max-w-md text-xs text-muted">{{ row.spec.help }}</p>
+            </div>
+
+            <div class="min-w-0 xl:col-span-4">
+              <div class="mb-1 text-xs font-medium uppercase tracking-wide text-muted xl:hidden">Effective value</div>
+              {% if row.effective %}
+                <div class="meta-value text-sm">{{ row.effective }}</div>
+              {% else %}
+                <div class="text-sm text-muted">unset</div>
+              {% endif %}
+              {% if row.source == "db" %}
+                <div class="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-muted">
+                  <span class="badge badge-info">stored</span>
+                  {% if row.updated_at %}<span>updated {{ row.updated_at|date:"M j, H:i" }}</span>{% endif %}
+                </div>
+              {% elif row.source == "env" %}
+                <div class="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-muted">
+                  <span class="badge badge-muted">env/compose</span>
+                </div>
+              {% elif row.source == "default" %}
+                <div class="mt-1.5 text-xs text-muted">built-in default</div>
+              {% endif %}
+              {% if row.shadowed %}
+                <p class="mt-1.5 max-w-md text-xs text-warn-ink">
+                  A value is stored here, but the environment wins for this
+                  key — remove {{ row.spec.key }} from your env/compose to
+                  use the stored one.
+                </p>
+              {% endif %}
+            </div>
+
+            <div class="min-w-0 xl:col-span-3">
+              <div class="mb-1 text-xs font-medium uppercase tracking-wide text-muted xl:hidden">New value</div>
+              <input type="{% if row.spec.secret %}password{% else %}text{% endif %}"
+                     id="value__{{ row.spec.key }}" name="value__{{ row.spec.key }}"
+                     autocomplete="off" spellcheck="false"
+                     placeholder="{% if row.spec.secret %}write-only{% else %}leave blank to keep{% endif %}"
+                     class="field-input field-mono" />
+              {% comment %}
+                The clear checkbox only exists when there is a stored value
+                to clear — on any other row it would be inert (the save path
+                skips it), and ten dead checkboxes read as ten decisions.
+              {% endcomment %}
+              {% if row.db_set %}
+                <label class="mt-2 flex items-center gap-2 text-xs text-muted">
+                  <input type="checkbox" name="clear__{{ row.spec.key }}" />
+                  Clear the stored value
+                </label>
+              {% endif %}
+            </div>
+          </div>
+        {% endfor %}
+      </section>
+    {% endfor %}
+
+    <div class="flex flex-wrap items-center justify-between gap-3">
+      <p class="text-xs text-muted">
+        Blank fields keep their current values. Secrets can be replaced or
+        cleared, never shown.
+      </p>
+      <button type="submit" name="action" value="save" class="btn-ink" :disabled="saving">
+        Save changes
+      </button>
+    </div>
+  </form>
+
+  {% comment %}
+    Endpoint switches. One small <form> per row, siblings of the save
+    form above — nesting would be illegal HTML and the browser would drop
+    the inner ones. The hidden input carries the action for the same
+    reason Test connection's does: a submitter disabled during submit is
+    excluded from the form data.
+
+    This card and Maintenance mode below are the page's switches — the
+    controls that change what the outside world sees. Everything above
+    them is configuration.
+  {% endcomment %}
+  <section class="card mt-4 xl:mt-6">
+    <div class="card-header">
+      <h2 class="card-title">Endpoints</h2>
+      <span class="text-xs text-muted">runtime kill switch — no redeploy</span>
+    </div>
+    {% for row in endpoint_rows %}
+      <div class="card-row grid gap-x-6 gap-y-3 xl:grid-cols-12">
+        <div class="min-w-0 xl:col-span-5">
+          <div class="font-mono text-sm font-medium">{{ row.slug }}</div>
+          {% if row.registered %}
+            <p class="mt-1.5 max-w-md text-xs text-muted">{{ row.description }}</p>
+            <div class="mt-0.5 font-mono text-xs text-muted">{{ row.versions }}</div>
+          {% else %}
+            <p class="mt-1.5 max-w-md text-xs text-warn-ink">
+              No endpoint is registered under this slug any more — the flag
+              is left over from an old version. It gates nothing today, but
+              would apply again if the slug ever comes back.
+            </p>
+          {% endif %}
+        </div>
+
+        <div class="min-w-0 xl:col-span-4">
+          <div class="mb-1 text-xs font-medium uppercase tracking-wide text-muted xl:hidden">Status</div>
+          {% if row.disabled %}
+            <span class="badge badge-danger">disabled</span>
+            {% if row.reason %}<div class="mt-1.5 text-sm">{{ row.reason }}</div>{% endif %}
+            <div class="mt-1.5 text-xs text-muted">
+              {% if row.updated_at %}since {{ row.updated_at|date:"M j, H:i" }}{% endif %}
+              {% if row.updated_by %}by {{ row.updated_by }}{% endif %}
+            </div>
+          {% else %}
+            <span class="badge badge-ok">serving</span>
+          {% endif %}
+        </div>
+
+        <div class="min-w-0 xl:col-span-3">
+          {% if row.disabled %}
+            <form method="post" x-data="{busy: false}" @submit="setTimeout(() => busy = true)">
+              {% csrf_token %}
+              <input type="hidden" name="action" value="endpoint" />
+              <input type="hidden" name="slug" value="{{ row.slug }}" />
+              <input type="hidden" name="disabled" value="0" />
+              <button type="submit" class="btn-signal btn-sm" :disabled="busy">Enable</button>
+            </form>
+          {% else %}
+            <form method="post" class="flex flex-wrap items-center gap-2"
+                  x-data="{busy: false}" @submit="setTimeout(() => busy = true)">
+              {% csrf_token %}
+              <input type="hidden" name="action" value="endpoint" />
+              <input type="hidden" name="slug" value="{{ row.slug }}" />
+              <input type="hidden" name="disabled" value="1" />
+              <input type="text" name="reason" maxlength="200" autocomplete="off"
+                     placeholder="why (shown here until re-enabled)"
+                     class="field-input min-w-0 flex-1 text-xs" />
+              <button type="submit" class="btn-danger-ghost btn-sm" :disabled="busy">Disable</button>
+            </form>
+          {% endif %}
+        </div>
+      </div>
+    {% endfor %}
+  </section>
+
+  {% comment %}
+    Maintenance mode — the whole-site switch; the per-endpoint ones are
+    in the card above. Its own <form>, a sibling of the save form —
+    nesting would be illegal HTML and the browser would drop the inner
+    one. Same hidden-input-carries-the-action pattern as Test connection,
+    for the same reason: a submitter disabled during submit is excluded
+    from the form data, so a button whose name/value was the action would
+    post without one.
+  {% endcomment %}
+  <section class="card mt-4 xl:mt-6">
+    <div class="card-header">
+      <h2 class="card-title">Maintenance mode</h2>
+      {% if maintenance_on %}
+        <span class="badge badge-danger">ON — consumers are being turned away</span>
+      {% else %}
+        <span class="badge badge-muted">off</span>
+      {% endif %}
+    </div>
+    <div class="card-body">
+      <p class="max-w-2xl text-xs text-muted">
+        While this is on, every consumer — API keys, connector URLs, and
+        anonymous visitors — gets a 503 with <span class="font-mono">Retry-After: 60</span>.
+        Browsers see a branded page; <span class="font-mono">/api/</span> and
+        <span class="font-mono">/mcp/</span> get the usual JSON error envelope.
+        You keep full access: this page, the Django admin, the login page,
+        logout and <span class="font-mono">/setup/</span> are never blocked, so
+        you can always turn it back off.
+      </p>
+      <form method="post" class="mt-4 space-y-3"
+            x-data="{busy: false}" @submit="setTimeout(() => busy = true)">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="maintenance" />
+        <label class="field">
+          <span class="field-label" for="maintenance_message">Banner message</span>
+          <input type="text" id="maintenance_message" name="maintenance_message"
+                 maxlength="500" autocomplete="off"
+                 placeholder="{{ maintenance_message }}"
+                 class="field-input" />
+          <span class="mt-1 block text-xs text-muted">
+            Shown on the 503 page. Leave blank to keep the current one.
+          </span>
+        </label>
+        <div class="flex flex-wrap items-center gap-3">
+          {% if maintenance_on %}
+            <button type="submit" class="btn-signal" :disabled="busy">
+              Turn maintenance off
+            </button>
+          {% else %}
+            {# The checkbox is what `enabled` reads; a bare submit posts it absent, i.e. off. #}
+            <input type="checkbox" name="enabled" value="on" id="enabled" class="sr-only" checked />
+            <button type="submit" class="btn-danger" :disabled="busy">
+              Turn maintenance on
+            </button>
+          {% endif %}
+        </div>
+      </form>
+    </div>
+  </section>
+{% endblock %}

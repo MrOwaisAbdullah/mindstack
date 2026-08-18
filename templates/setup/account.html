@@ -1,0 +1,49 @@
+{% extends "setup/_layout.html" %}
+
+{% block step_title %}Create your account{% endblock %}
+{% block step_blurb %}
+  One operator account. It can approve feeds and read every private note,
+  so it is the only account this server will have.
+{% endblock %}
+
+{% block step_body %}
+  <div class="notice notice-danger mb-5">
+    <strong>This page is open to anyone who can reach this server right now.</strong>
+    Creating the account closes it permanently. If this server is on a public
+    address, do it before you do anything else.
+  </div>
+
+  <form method="post" class="max-w-sm">
+    {% csrf_token %}
+    {% if form.errors %}
+      <div class="notice notice-danger mb-4 text-danger-ink">
+        {% for field, errors in form.errors.items %}
+          {% for e in errors %}<div>{{ e }}</div>{% endfor %}
+        {% endfor %}
+      </div>
+    {% endif %}
+
+    <label for="id_username" class="block text-sm font-medium">Username</label>
+    <input type="text" name="username" id="id_username" autofocus required
+           autocomplete="username" class="login-input mt-1 mb-4 block w-full px-4 py-2.5 text-sm" />
+
+    <label for="id_email" class="block text-sm font-medium">
+      Email <span class="text-muted" >(optional)</span>
+    </label>
+    <input type="email" name="email" id="id_email" autocomplete="email"
+           class="login-input mt-1 mb-4 block w-full px-4 py-2.5 text-sm" />
+
+    <label for="id_password1" class="block text-sm font-medium">Password</label>
+    <input type="password" name="password1" id="id_password1" required
+           autocomplete="new-password" class="login-input mt-1 mb-4 block w-full px-4 py-2.5 text-sm" />
+
+    <label for="id_password2" class="block text-sm font-medium">Confirm password</label>
+    <input type="password" name="password2" id="id_password2" required
+           autocomplete="new-password" class="login-input mt-1 block w-full px-4 py-2.5 text-sm" />
+
+    <button type="submit"
+            class="home-cta mt-6 inline-flex items-center justify-center px-8 py-3 text-sm font-semibold">
+      Create account and continue
+    </button>
+  </form>
+{% endblock %}

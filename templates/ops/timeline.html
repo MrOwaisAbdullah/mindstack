@@ -1,0 +1,58 @@
+{% extends "ops/_layout.html" %}
+{% load static %}
+
+{% block page_title_tag %}Timeline{% endblock %}
+{% block page_title %}Belief timeline{% endblock %}
+{% block page_subtitle %}
+  <p class="mt-1 text-sm text-muted">
+    What the brain gained each month, and every position it has revised.
+    Notes are superseded, never deleted — so changing your mind leaves a trace.
+  </p>
+{% endblock %}
+{% block content_width %}max-w-[1600px]{% endblock %}
+
+{% block head_extra %}
+  <link rel="stylesheet" href="{% static 'css/timeline.css' %}" />
+  <script defer src="{% static 'js/brain-viz.js' %}" nonce="{{ csp_nonce }}"></script>
+  <script defer src="{% static 'js/timeline.js' %}" nonce="{{ csp_nonce }}"></script>
+{% endblock %}
+
+{% block content %}
+  {% comment %}
+    Both figures colour through CSS (.viz-kind-* → --kind-color, semantic
+    tokens elsewhere), so a mid-session theme toggle repaints them with no
+    JS — the rings mechanism, not the explorer's canvas observer.
+    timeline.js adds .tl-scroll to the figure hosts: below 640px the
+    figure scrolls sideways instead of shrinking into illegibility.
+  {% endcomment %}
+  <div data-timeline data-graph-url="{% url 'brainconfig:graph-json' %}?days=0">
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">Brain growth</h2>
+        <span class="tl-status" data-tl-growth-note>Reading the index…</span>
+      </div>
+      <div class="card-body">
+        <div data-tl-growth></div>
+        <p class="mt-2 tl-note" data-tl-growth-cap></p>
+        <div class="mt-2 tl-key" data-tl-legend></div>
+      </div>
+    </div>
+
+    <div class="card mt-4 xl:mt-6">
+      <div class="card-header">
+        <h2 class="card-title">Superseded positions</h2>
+        <a href="{% url 'brainconfig:browser' %}?status=superseded" class="text-xs link-accent">Browse superseded &rarr;</a>
+      </div>
+      <div class="card-body">
+        <div data-tl-beliefs></div>
+        <p class="mt-2 tl-note" data-tl-belief-note></p>
+        {# Static key, unhidden by timeline.js once chains render — it never lies about an empty figure. #}
+        <div class="mt-2 tl-key" data-tl-belief-key hidden>
+          <span class="tl-key-item"><span class="tl-sample-dot"></span> current position</span>
+          <span class="tl-key-item"><span class="tl-sample-dot tl-sample-hollow"></span> superseded</span>
+          <span class="tl-key-item"><span class="tl-sample-arrow"></span> replaced by</span>
+        </div>
+      </div>
+    </div>
+  </div>
+{% endblock %}

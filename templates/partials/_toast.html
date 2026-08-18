@@ -1,0 +1,82 @@
+{% load i18n %}
+{% comment %}
+  toast notification stack.
+
+  Server triggers a toast by sending the response header:
+      HX-Trigger: {"show-toast": {"variant": "success", "message": "Saved!"}}
+  HTMX dispatches a `show-toast` CustomEvent on the document with the
+  payload in `event.detail.value`. Alpine root catches it, pushes onto
+  a stack, auto-dismisses after 4s.
+
+  Variants: success / error / warning / info (default).
+
+  Mount once near the bottom of <body> (the layout templates do this).
+{% endcomment %}
+<div
+  x-data="{
+    toasts: [],
+    push(payload) {
+      const t = {
+        id: Date.now() + Math.random(),
+        variant: (payload && payload.variant) || 'info',
+        message: (payload && payload.message) || '',
+      };
+      if (!t.message) return;
+      this.toasts.push(t);
+      setTimeout(() => this.dismiss(t.id), 4000);
+    },
+    dismiss(id) {
+      this.toasts = this.toasts.filter(x => x.id !== id);
+    },
+  }"
+  x-on:show-toast.window="push($event.detail.value || $event.detail)"
+  class="pointer-events-none fixed top-4 end-4 z-50 flex w-full max-w-sm flex-col gap-2"
+  role="status"
+  aria-live="polite"
+>
+  <template x-for="t in toasts" :key="t.id">
+    <div
+      x-transition:enter="transition ease-out duration-150"
+      x-transition:enter-start="opacity-0 translate-x-4"
+      x-transition:enter-end="opacity-100 translate-x-0"
+      x-transition:leave="transition ease-in duration-150"
+      x-transition:leave-start="opacity-100"
+      x-transition:leave-end="opacity-0"
+      class="pointer-events-auto flex items-start gap-3 rounded-lg border bg-white px-4 py-3 text-sm shadow-lg dark:bg-zinc-900"
+      :class="{
+        'border-emerald-300 dark:border-emerald-800': t.variant === 'success',
+        'border-rose-300 dark:border-rose-800': t.variant === 'error',
+        'border-amber-300 dark:border-amber-800': t.variant === 'warning',
+        'border-zinc-300 dark:border-zinc-700': t.variant === 'info' || !['success','error','warning'].includes(t.variant),
+      }"
+    >
+      <span aria-hidden="true" class="mt-0.5 inline-flex h-4 w-4 items-center justify-center"
+        :class="{
+          'text-emerald-600 dark:text-emerald-400': t.variant === 'success',
+          'text-rose-600 dark:text-rose-400': t.variant === 'error',
+          'text-amber-600 dark:text-amber-400': t.variant === 'warning',
+          'text-zinc-500 dark:text-zinc-400': t.variant === 'info' || !['success','error','warning'].includes(t.variant),
+        }"
+      >
+        <template x-if="t.variant === 'success'">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+        </template>
+        <template x-if="t.variant === 'error' || t.variant === 'warning'">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/></svg>
+        </template>
+        <template x-if="t.variant !== 'success' && t.variant !== 'error' && t.variant !== 'warning'">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+        </template>
+      </span>
+      <p class="flex-1 text-zinc-700 dark:text-zinc-200" x-text="t.message"></p>
+      <button
+        type="button"
+        x-on:click="dismiss(t.id)"
+        class="-me-1 inline-flex h-5 w-5 items-center justify-center rounded text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 focus-visible:ring-2 focus-visible:ring-brand-500"
+        aria-label="{% trans 'Dismiss' %}"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+  </template>
+</div>

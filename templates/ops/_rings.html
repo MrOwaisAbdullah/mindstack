@@ -1,0 +1,25 @@
+{% comment %}
+  M3.5.2 — visibility rings. Include anywhere an overview of the brain
+  belongs; the page it sits on must pull in rings.css + rings.js (see
+  ops/dashboard.html). Optional context var `rings_days` scopes the
+  read counts that size the dots (blank = the endpoint default, 30).
+
+  Draws from /ops/graph.json, so it is staff-only by inheritance.
+{% endcomment %}
+<div class="card">
+  <div class="card-header">
+    <div>
+      <h2 class="card-title">Visibility rings</h2>
+      <p class="mt-0.5 text-xs text-muted">
+        private core → agents-only → public rim · click a dot to open the note
+      </p>
+    </div>
+  </div>
+  <div class="card-body">
+    <div class="rings"
+         data-rings
+         data-graph-url="{% url 'brainconfig:graph-json' %}"
+         data-activity-url="{% url 'brainconfig:activity-json' %}"
+         {% if rings_days %}data-days="{{ rings_days }}"{% endif %}></div>
+  </div>
+</div>

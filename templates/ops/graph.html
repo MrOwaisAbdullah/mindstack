@@ -1,0 +1,56 @@
+{% extends "ops/_layout.html" %}
+{% load static %}
+
+{% block page_title_tag %}Graph{% endblock %}
+{% block page_title %}Graph explorer{% endblock %}
+{% block page_subtitle %}
+  <p class="mt-1 text-sm text-muted">
+    The whole brain as a force layout — notes cluster around the topics they carry.
+    Pick a lens to see exactly what that lens scopes; click a note to open it.
+  </p>
+{% endblock %}
+{% block content_width %}max-w-[1600px]{% endblock %}
+
+{% block head_extra %}
+  <link rel="stylesheet" href="{% static 'css/explorer.css' %}" />
+  <script defer src="{% static 'vendor/cytoscape.min.js' %}" nonce="{{ csp_nonce }}"></script>
+  <script defer src="{% static 'js/brain-viz.js' %}" nonce="{{ csp_nonce }}"></script>
+  <script defer src="{% static 'js/explorer.js' %}" nonce="{{ csp_nonce }}"></script>
+  <script defer src="{% static 'js/activity.js' %}" nonce="{{ csp_nonce }}"></script>
+{% endblock %}
+
+{% block content %}
+  <div class="gx" data-graph-explorer
+       data-graph-url="{% url 'brainconfig:graph-json' %}"
+       data-activity-url="{% url 'brainconfig:activity-json' %}">
+    <div class="card mb-4 flex flex-wrap items-end gap-3 p-3">
+      <label class="text-sm">
+        <span class="mb-1 block text-xs text-muted">Lens</span>
+        <select class="field-select" data-lens-picker>
+          <option value="">no lens — whole brain</option>
+        </select>
+      </label>
+      <button type="button" class="btn-ghost" data-graph-reset>Reset view</button>
+      <div class="gx-scope self-center" data-lens-scope></div>
+      <div class="ms-auto gx-status self-center" data-graph-status>Reading the index…</div>
+    </div>
+
+    <div class="gx-canvas" data-graph-canvas></div>
+    <div class="gx-tip" data-graph-tip role="status"></div>
+
+    {# M3.5.4 — reads land here as they happen; the matching node pulses. #}
+    <div class="gx-ticker">
+      <span class="gx-ticker-head"><span class="gx-live"></span> live reads</span>
+      <div data-graph-ticker></div>
+    </div>
+
+    <div class="mt-3 gx-key" data-graph-legend></div>
+    <div class="mt-2 gx-key">
+      <span class="gx-key-item"><span class="gx-edge-swatch gx-edge-topic"></span> topic</span>
+      <span class="gx-key-item"><span class="gx-edge-swatch gx-edge-project"></span> project</span>
+      <span class="gx-key-item"><span class="gx-edge-swatch gx-edge-source"></span> same source</span>
+      <span class="gx-key-item"><span class="gx-edge-swatch gx-edge-superseded"></span> superseded by</span>
+      <span class="gx-key-item">hollow = superseded · size = reads · boxes are topics (click one to isolate it)</span>
+    </div>
+  </div>
+{% endblock %}

@@ -1,0 +1,50 @@
+{% extends "setup/_layout.html" %}
+
+{% block step_title %}Create your brain{% endblock %}
+{% block step_blurb %}
+  Your brain is a normal GitHub repository full of markdown files. You own
+  it. You can read it, edit it, and take it with you.
+{% endblock %}
+
+{% block step_body %}
+  <a href="{{ template_url }}" target="_blank" rel="noopener"
+     class="home-cta inline-flex items-center justify-center px-6 py-3 text-sm font-semibold">
+    Create my brain repo &rarr;
+  </a>
+  <p class="mt-2 text-xs text-muted">
+    Opens GitHub's "create from template" page in a new tab. No token needed —
+    name it, choose private, click Create. Already have one? Just fill the box
+    below.
+  </p>
+
+  <form method="post" class="mt-6">
+    {% csrf_token %}
+    <label for="id_repo" class="block text-sm font-medium">Your repository</label>
+    <input type="text" name="repo" id="id_repo" required
+           placeholder="your-name/brain"
+           value="{{ current }}"
+           class="login-input mt-1 block w-full max-w-md px-4 py-2.5 text-sm font-mono" />
+    <p class="mt-1.5 text-xs text-muted">
+      <code>owner/name</code>, or paste the full URL from the repository page.
+      GitHub repositories are stored as an <code>ssh</code> remote, because the
+      key this server uses in the next step is an ssh key.
+    </p>
+
+    {% if error %}
+      <p class="mt-3 text-sm text-danger-ink">{{ error }}</p>
+    {% endif %}
+
+    {% if env_pinned %}
+      <p class="notice notice-warn mt-3">
+        <code>BRAIN_REPO_URL</code> is set in this deployment's environment, so
+        it wins over anything saved here. Remove it from your env/compose to
+        manage the repository from this page.
+      </p>
+    {% endif %}
+
+    <button type="submit"
+            class="btn-ink btn-lg mt-5">
+      Save and continue
+    </button>
+  </form>
+{% endblock %}

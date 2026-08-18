@@ -1,0 +1,219 @@
+{% extends "ops/_layout.html" %}
+{% load static %}
+
+{% block page_title_tag %}Dashboard{% endblock %}
+{% block page_title %}Dashboard{% endblock %}
+{% block page_subtitle %}
+  <p class="mt-1 text-sm text-muted">The brain server at a glance.</p>
+{% endblock %}
+{% block content_width %}max-w-[1600px]{% endblock %}
+
+{% comment %}
+  Sync status lives on the title line, not in a KPI tile: it is system
+  state, not a number you compare day to day — and the freed tile goes
+  to the approval queue, which IS the product's daily loop.
+{% endcomment %}
+{% block page_actions %}
+  <a href="{% url 'brainconfig:health' %}"
+     class="badge {% if probe.valid and probe.contract_ok %}badge-ok{% else %}badge-danger{% endif %}">
+    <span class="dot {% if probe.valid and probe.contract_ok %}dot-ok{% else %}dot-danger{% endif %}"></span>
+    {% if probe.valid and probe.contract_ok %}Sync healthy{% else %}Sync degraded{% endif %}
+    {% if last_sync %}
+      <span class="hidden sm:inline">· {{ last_sync.trigger }}</span>
+      · <span class="font-mono">{{ last_sync.commit_sha|slice:":8" }}</span>
+      <span class="hidden sm:inline">· {{ last_sync.started_at|date:"M j, H:i" }}</span>
+      {% if last_sync.drift_detected %} · drift{% endif %}
+    {% else %}
+      · never synced
+    {% endif %}
+  </a>
+{% endblock %}
+
+{% block head_extra %}
+  <link rel="stylesheet" href="{% static 'css/rings.css' %}" />
+  <script defer src="{% static 'js/brain-viz.js' %}" nonce="{{ csp_nonce }}"></script>
+  <script defer src="{% static 'js/rings.js' %}" nonce="{{ csp_nonce }}"></script>
+  <script defer src="{% static 'js/activity.js' %}" nonce="{{ csp_nonce }}"></script>
+{% endblock %}
+
+{% block content %}
+  {% comment %}--- setup health ---
+    Only problems, and only above the fold. An operator who has finished
+    setting up should see nothing here; one who hasn't should not be
+    able to miss it. Details and the fix buttons live on /ops/health/.
+
+    NOTE: keep this as a comment TAG. Django's hash comment is
+    single-line ONLY, so this block — which used to be written that way —
+    rendered verbatim at the top of the dashboard, the first thing anyone
+    saw on the main page.
+  {% endcomment %}
+  {% if health_problems %}
+    <div class="card mb-4 xl:mb-6">
+      <div class="card-header">
+        <h2 class="card-title">Setup &amp; health</h2>
+        <a href="{% url 'brainconfig:health' %}" class="text-xs link-accent">Review and fix &rarr;</a>
+      </div>
+      {% for c in health_problems %}
+        <div class="card-row flex items-start gap-2.5">
+          <span class="dot mt-1.5 {% if c.level == 'danger' %}dot-danger{% else %}dot-warn{% endif %}"></span>
+          <div>
+            <div class="text-sm font-medium {% if c.level == 'danger' %}text-danger-ink{% endif %}">{{ c.title }}</div>
+            <div class="mt-0.5 max-w-3xl text-xs text-muted">{{ c.detail }}</div>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  {% endif %}
+
+  {# --- KPI row: the four numbers the operator actually compares ------- #}
+  <div class="grid grid-cols-2 gap-4 xl:grid-cols-4 xl:gap-6">
+    <a href="{% url 'brainconfig:browser' %}" class="stat-tile transition-colors hover:border-accent/40">
+      <div class="stat-label">Entities</div>
+      <div class="stat-value text-3xl">{{ entity_total }}</div>
+      <div class="text-xs text-muted">
+        {{ vis_public }} public · {{ vis_agents }} agents-only · {{ vis_private }} private{% if superseded %} · {{ superseded }} superseded{% endif %}
+      </div>
+    </a>
+
+    <a href="{% url 'brainconfig:timeline' %}" class="stat-tile transition-colors hover:border-accent/40">
+      <div class="stat-label">Reads today</div>
+      <div class="stat-value text-3xl">{{ reads_day }}</div>
+      <div class="text-xs text-muted">{{ reads_week }} this week</div>
+      <svg class="spark mt-auto" viewBox="0 0 100 28" preserveAspectRatio="none" aria-hidden="true">
+        <polyline class="spark-line" points="{{ reads_spark }}"></polyline>
+      </svg>
+    </a>
+
+    <div class="stat-tile">
+      <div class="stat-label">SDK spend today</div>
+      <div class="stat-value text-3xl">${{ spend_day.cost|floatformat:2 }}</div>
+      <div class="text-xs text-muted">
+        {{ spend_day.runs }} run{{ spend_day.runs|pluralize }}{% if spend_day.errors %} · <span class="text-danger-ink">{{ spend_day.errors }} failed</span>{% endif %} · ${{ spend_week.cost|floatformat:2 }} / week
+      </div>
+    </div>
+
+    <a href="{% url 'brainconfig:feeds' %}" class="stat-tile transition-colors hover:border-accent/40">
+      <div class="stat-label">Pending feeds</div>
+      <div class="stat-value text-3xl">{{ pending_feeds }}</div>
+      <div class="text-xs text-muted">{% if pending_feeds %}waiting for your approval{% else %}queue is clear{% endif %}</div>
+    </a>
+  </div>
+
+  {# --- main split: brain on the left, pulse on the right -------------- #}
+  {% comment %}
+    min-w-0 on every grid item below: a truncate span's nowrap text
+    still bubbles its full one-line width up as the item's min-content,
+    and on mobile the single column track adopts it — one long entity
+    id pushed the whole column (and the rings card) past the viewport.
+    min-width:0 on the item is what actually caps the track at the
+    container; truncation then happens where it should.
+  {% endcomment %}
+  <div class="mt-4 grid gap-4 xl:mt-6 xl:grid-cols-12 xl:gap-6">
+    <div class="min-w-0 space-y-4 xl:col-span-8 xl:space-y-6">
+      {# --- the brain, drawn (M3.5.2) --- #}
+      {% include "ops/_rings.html" %}
+
+      <div class="grid gap-4 md:grid-cols-2 xl:gap-6">
+        {# --- entity mix ---------------------------------------------- #}
+        {% comment %}
+          The bars wear the same kind colours as the rings (.rings-kind-*
+          sets --kind-color; rings.css is on this page), which makes this
+          list the readable twin of the viz. Widths are SVG width
+          attributes, not style= — the CSP drops inline styles.
+
+          Flex rows, NOT a table: an SVG's intrinsic width (300px) sets
+          the min-content of an auto-layout table cell, which forced the
+          whole left column ~30px past the phone viewport. min-w-0 on
+          the flex track is what kills that floor.
+        {% endcomment %}
+        <div class="card min-w-0 p-4">
+          <h2 class="card-title">Entity mix</h2>
+          <ul class="mt-3 space-y-2 text-sm">
+            {% for row in kind_counts %}
+              <li class="flex items-center gap-3">
+                <a class="w-16 shrink-0 truncate text-accent" title="{{ row.kind }}" href="{% url 'brainconfig:browser' %}?kind={{ row.kind }}">{{ row.kind }}</a>
+                <div class="min-w-0 flex-1">
+                  <svg class="block h-1 w-full" aria-hidden="true"><rect class="viz-bar viz-kind-{{ row.kind }}" width="{% widthratio row.n kind_counts.0.n 100 %}%" height="100%" rx="2"></rect></svg>
+                </div>
+                <span class="w-6 shrink-0 text-right font-mono">{{ row.n }}</span>
+              </li>
+            {% endfor %}
+          </ul>
+        </div>
+
+        {# --- staleness ------------------------------------------------ #}
+        <div class="card min-w-0 p-4">
+          <h2 class="card-title">
+            Stale project cards <span class="font-normal text-muted">(last-verified &gt; {{ stale_after }}d)</span>
+          </h2>
+          {% if stale_projects %}
+            <ul class="mt-3 space-y-2 text-sm">
+              {% for e in stale_projects %}
+                <li class="flex items-center justify-between gap-3">
+                  <a class="min-w-0 truncate text-accent" href="{% url 'brainconfig:entity' e.entity_id %}">{{ e.entity_id }}</a>
+                  <span class="shrink-0 text-muted font-mono">
+                    {% if e.last_verified %}{{ e.last_verified }}{% else %}never verified{% endif %}
+                  </span>
+                </li>
+              {% endfor %}
+            </ul>
+          {% else %}
+            <p class="mt-3 flex items-center gap-2 text-sm text-muted">
+              <span class="dot dot-ok"></span> All project cards fresh.
+            </p>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <div class="min-w-0 space-y-4 xl:col-span-4 xl:space-y-6">
+      {# --- most served ------------------------------------------------ #}
+      <div class="card p-4">
+        <h2 class="card-title">Most-served notes <span class="font-normal text-muted">(30d)</span></h2>
+        {% if most_served %}
+          <ul class="mt-3 space-y-2 text-sm">
+            {% for eid, n in most_served %}
+              <li class="flex items-center justify-between gap-3">
+                <a class="min-w-0 truncate text-accent" href="{% url 'brainconfig:entity' eid %}">{{ eid }}</a>
+                <span class="shrink-0 font-mono">{{ n }}</span>
+              </li>
+            {% endfor %}
+          </ul>
+        {% else %}
+          <p class="mt-3 text-sm text-muted">No reads yet — this list fills as consumers pull notes.</p>
+        {% endif %}
+      </div>
+
+      {# --- recent activity --------------------------------------------- #}
+      <div class="card p-4">
+        <h2 class="card-title">Recent activity</h2>
+        <ul class="mt-3 space-y-1.5 text-xs font-mono">
+          {% for ev in recent_events %}
+            <li class="flex items-baseline gap-2">
+              <span class="shrink-0 text-muted">{{ ev.at|date:"m-d H:i" }}</span>
+              <span class="min-w-0 truncate">{{ ev.label }}{% if ev.consumer %} · {{ ev.consumer }}{% endif %}</span>
+              {% if ev.count > 1 %}<span class="shrink-0 text-muted">&times;{{ ev.count }}</span>{% endif %}
+            </li>
+          {% empty %}
+            <li class="text-muted">No events yet.</li>
+          {% endfor %}
+        </ul>
+        {% if recent_ops %}
+          <h3 class="mt-4 text-xs font-medium uppercase tracking-wide text-muted">SDK runs</h3>
+          <ul class="mt-1.5 space-y-1.5 text-xs font-mono">
+            {% for op in recent_ops %}
+              <li>
+                <span class="text-muted">{{ op.created_at|date:"m-d H:i" }}</span>
+                {{ op.kind }} ·
+                {% if op.ok is None %}<span class="text-warn-ink">running</span>
+                {% elif op.ok %}<span class="text-signal-ink">ok</span>
+                {% else %}<span class="text-danger-ink">{{ op.error_class|default:"error" }}</span>{% endif %}
+                {% if op.cost_usd %}· ${{ op.cost_usd|floatformat:4 }}{% endif %}
+              </li>
+            {% endfor %}
+          </ul>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+{% endblock %}

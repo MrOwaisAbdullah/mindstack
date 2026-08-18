@@ -1,0 +1,235 @@
+{% extends "ops/_layout.html" %}
+
+{% block page_title_tag %}Logs{% endblock %}
+{% block page_title %}Logs &amp; ledger{% endblock %}
+{% block page_subtitle %}
+  <p class="mt-1 text-sm text-muted">The event stream, the SDK ledger, and spend against the daily cap — the last {{ days }} day{{ days|pluralize }}.</p>
+{% endblock %}
+{% block content_width %}max-w-[1600px]{% endblock %}
+
+{% comment %}
+  The window scopes the WHOLE page — tiles, ledger and stream alike — so
+  it lives on the title line, not inside the stream's filter form. Plain
+  links, not an auto-submitting select: the old onchange attribute was an
+  inline event handler, which the enforced CSP refuses — the control
+  rendered but silently did nothing.
+{% endcomment %}
+{% block page_actions %}
+  <nav class="flex items-center gap-1" aria-label="Time window">
+    {% for d in day_choices %}
+      {% if d == days %}
+        <span class="btn-primary btn-sm" aria-current="page">{{ d }}d</span>
+      {% else %}
+        <a class="btn-ghost btn-sm" href="?days={{ d }}{% if etype %}&amp;type={{ etype|urlencode }}{% endif %}">{{ d }}d</a>
+      {% endif %}
+    {% endfor %}
+  </nav>
+{% endblock %}
+
+{% block content %}
+  {# --- the three numbers: money, runs, tokens ------------------------ #}
+  <div class="grid gap-4 sm:grid-cols-3 xl:gap-6">
+    <div class="stat-tile">
+      <div class="stat-label">Spend today vs cap</div>
+      <div class="stat-value">${{ today_cost|floatformat:2 }}</div>
+      {% if cap %}
+        {% comment %}
+          The breaker meter. The width is a runtime percentage and the CSP
+          drops style attributes, so it is drawn as an SVG width attribute
+          (the dashboard bars do the same). Colour steps signal → warn →
+          danger as spend approaches the cap; red still means a problem.
+        {% endcomment %}
+        <div class="mt-1 h-2 w-full overflow-hidden rounded-pill bg-surface-2">
+          <svg class="block h-full w-full" aria-hidden="true">
+            <rect class="{% if cap_pct >= 100 %}fill-danger{% elif cap_pct >= 75 %}fill-warn{% else %}fill-signal{% endif %}" width="{{ cap_pct }}%" height="100%"></rect>
+          </svg>
+        </div>
+        {% if cap_pct >= 100 %}
+          <div class="text-xs font-medium text-danger-ink">Breaker tripped — SDK runs refused until tomorrow or a higher cap</div>
+        {% else %}
+          <div class="text-xs text-muted">{{ cap_pct }}% of the ${{ cap|floatformat:2 }} daily circuit breaker</div>
+        {% endif %}
+      {% else %}
+        <div class="text-xs text-muted">Breaker disabled — set a daily cap in <a class="link-accent" href="{% url 'brainconfig:settings' %}">Settings</a> to arm it</div>
+      {% endif %}
+      {% comment %}
+        Runs that burned tokens and never reported a cost — a timeout, or
+        a browser that hung up mid-stream. That spend is real and the
+        figure above cannot see it, so the gap is stated rather than
+        priced: per-model pricing changes, and a made-up dollar amount
+        inside a circuit breaker is worse than an admitted blind spot.
+
+        `total_tokens`, not input+output. Every run replays a system
+        prompt and a snapshot through the prompt cache, so the cache
+        columns ARE the volume — a measured cut-off run was 4 tokens by
+        the old sum and 13,905 by this one.
+      {% endcomment %}
+      {% if unpriced.runs %}
+        <div class="mt-1 text-xs text-warn-ink">
+          Not counted above: {{ unpriced.runs }} run{{ unpriced.runs|pluralize }} used
+          {{ unpriced.total_tokens }} tokens the CLI never priced
+          (timed out or disconnected).
+        </div>
+      {% endif %}
+    </div>
+
+    <div class="stat-tile">
+      <div class="stat-label">SDK runs ({{ days }}d)</div>
+      <div class="stat-value">{{ totals.runs }}</div>
+      <div class="text-xs text-muted">
+        {% if totals.errors %}<span class="font-medium text-danger-ink">{{ totals.errors }} failed</span>{% else %}0 failed{% endif %}{% if totals.running %} · {{ totals.running }} unfinished{% endif %} · ${{ totals.cost|default:0|floatformat:4 }}
+      </div>
+    </div>
+
+    <div class="stat-tile">
+      <div class="stat-label">Tokens ({{ days }}d)</div>
+      <div class="stat-value">{{ totals.tin|default:0 }} / {{ totals.tout|default:0 }}</div>
+      <div class="text-xs text-muted">input / output</div>
+    </div>
+  </div>
+
+  {# --- aggregates: what ran, what got read --------------------------- #}
+  {# min-w-0 on each grid item: truncating content propagates its nowrap #}
+  {# width up as min-content and widens the mobile column without it.   #}
+  <div class="mt-4 grid gap-4 md:grid-cols-2 xl:mt-6 xl:gap-6">
+    <div class="card min-w-0">
+      <div class="card-header">
+        <h2 class="card-title">Ledger by kind</h2>
+        <span class="text-xs text-muted">last {{ days }}d</span>
+      </div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Kind</th>
+              <th>Runs</th>
+              <th>Failed</th>
+              <th>Tokens in/out</th>
+              <th>Cost</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for k in by_kind %}
+              <tr>
+                <td class="font-mono">{{ k.kind }}</td>
+                <td class="font-mono">{{ k.runs }}</td>
+                <td class="font-mono {% if k.errors %}text-danger-ink{% else %}text-muted{% endif %}">{{ k.errors }}</td>
+                <td class="whitespace-nowrap text-xs font-mono text-muted">{{ k.tin|default:0 }} / {{ k.tout|default:0 }}</td>
+                <td class="whitespace-nowrap text-xs font-mono text-muted">${{ k.cost|default:0|floatformat:4 }}</td>
+              </tr>
+            {% empty %}
+              <tr>
+                <td colspan="5" class="px-4 py-8 text-center text-muted">
+                  No SDK runs in the last {{ days }} day{{ days|pluralize }} — feed extraction and reader chat land here.
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card min-w-0">
+      <div class="card-header">
+        <h2 class="card-title">Most-served entities</h2>
+        <span class="text-xs text-muted">last {{ days }}d</span>
+      </div>
+      <div class="card-body">
+        {% if most_served %}
+          <ul class="space-y-2 text-sm">
+            {% for eid, n in most_served %}
+              <li class="flex items-center justify-between gap-3">
+                <a class="min-w-0 truncate text-accent" href="{% url 'brainconfig:entity' eid %}">{{ eid }}</a>
+                <span class="shrink-0 font-mono">{{ n }}</span>
+              </li>
+            {% endfor %}
+          </ul>
+        {% else %}
+          <p class="text-sm text-muted">No reads in the last {{ days }} day{{ days|pluralize }} — this list fills as consumers pull notes.</p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  {# --- the raw stream, newest first, 50 a page ----------------------- #}
+  <div class="card mt-4 xl:mt-6">
+    <div class="card-header flex-wrap">
+      <div class="flex items-baseline gap-2">
+        <h2 class="card-title">Event stream</h2>
+        <span class="text-xs text-muted">
+          {% if page_obj.paginator.count %}{{ page_obj.start_index }}&ndash;{{ page_obj.end_index }} of {{ page_obj.paginator.count }}{% else %}last {{ days }}d{% endif %}
+        </span>
+      </div>
+      <form method="get" class="flex flex-wrap items-center gap-2">
+        <input type="hidden" name="days" value="{{ days }}" />
+        <label class="flex items-center gap-2 text-xs text-muted">
+          Type
+          <select name="type" class="field-select w-auto py-1.5 text-xs">
+            <option value="">all</option>
+            {% for t in event_types %}<option value="{{ t }}" {% if t == etype %}selected{% endif %}>{{ t }}</option>{% endfor %}
+          </select>
+        </label>
+        <button type="submit" class="btn-ghost btn-sm">Filter</button>
+        {% if etype %}<a class="btn-ghost btn-sm" href="?days={{ days }}">Reset</a>{% endif %}
+      </form>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>When</th>
+            <th>Type</th>
+            <th>Consumer</th>
+            <th>Entities</th>
+            <th>Details</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in event_rows %}
+            <tr>
+              <td class="whitespace-nowrap text-xs font-mono text-muted">{{ row.e.created_at|date:"m-d H:i:s" }}</td>
+              <td>
+                <span class="badge {% if row.e.type == 'read' %}badge-ok{% elif row.e.type == 'drift' or row.e.type == 'auth_denied' or row.e.type == 'degraded' %}badge-danger{% elif row.e.type == 'feed' %}badge-warn{% else %}badge-info{% endif %}">
+                  {{ row.e.type }}
+                </span>
+              </td>
+              {# consumer is an APIKey FK; connector calls carry a `via` label instead. #}
+              {# Resolved in the view: `details.via` as a FILTER ARGUMENT raises #}
+              {# VariableDoesNotExist on the events that have no `via` at all. #}
+              <td class="text-xs font-mono text-muted">{{ row.credential|default:"—" }}</td>
+              <td class="text-xs font-mono text-muted">{{ row.n_entities|default:"—" }}</td>
+              {# min-w-64: without a floor this column collapses on phones #}
+              {# and every row wraps ~20 lines tall; the table-wrap scroll #}
+              {# is the better trade for a log.                            #}
+              <td class="min-w-64 text-xs font-mono text-muted [overflow-wrap:anywhere]">{{ row.details_json }}</td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="5" class="px-4 py-10 text-center text-muted">
+                {% if etype %}
+                  No {{ etype }} events in the last {{ days }} day{{ days|pluralize }} — <a class="link-accent" href="?days={{ days }}">show all types</a>.
+                {% else %}
+                  No events in the last {{ days }} day{{ days|pluralize }} yet — reads, syncs and feed activity land here as they happen.
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  {% if page_obj.paginator.num_pages > 1 %}
+    <nav class="mt-4 flex flex-wrap items-center justify-between gap-3" aria-label="Pagination">
+      <span class="text-xs text-muted">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+      <div class="flex gap-2">
+        {% if page_obj.has_previous %}
+          <a class="btn-ghost btn-sm" href="?{{ filter_qs }}&amp;page={{ page_obj.previous_page_number }}">&larr; Newer</a>
+        {% endif %}
+        {% if page_obj.has_next %}
+          <a class="btn-ghost btn-sm" href="?{{ filter_qs }}&amp;page={{ page_obj.next_page_number }}">Older &rarr;</a>
+        {% endif %}
+      </div>
+    </nav>
+  {% endif %}
+{% endblock %}

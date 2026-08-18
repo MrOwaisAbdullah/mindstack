@@ -1,0 +1,86 @@
+{% extends "ops/_layout.html" %}
+
+{% block page_title_tag %}Chat{% endblock %}
+{% block page_title %}Chat with the mind{% endblock %}
+{% block page_subtitle %}
+  <p class="mt-1 text-sm text-muted">
+    The reader agent over one tier's snapshot per session — a public-tier session behaves exactly like a public clone would.
+  </p>
+{% endblock %}
+{% block content_width %}max-w-[1600px]{% endblock %}
+
+{% block content %}
+  {# New-session form: choosing the tier IS the decision — everything else about a session follows from it. #}
+  <form method="post" class="card mb-4 flex flex-wrap items-end gap-3 p-4">
+    {% csrf_token %}
+    <label class="text-sm">
+      <span class="mb-1 block text-xs text-muted">Tier for the new session</span>
+      <select name="tier" class="field-select">
+        {% for t in tiers %}<option value="{{ t }}" {% if t == "agents-only" %}selected{% endif %}>{{ t }}</option>{% endfor %}
+      </select>
+    </label>
+    <button type="submit" class="btn-primary">Start session</button>
+    <span class="text-xs text-muted">The tier is fixed for the life of the session — that's the point of the test bench.</span>
+  </form>
+
+  {% if sessions %}
+    <div class="card table-wrap">
+      <table class="table table-hover">
+        <thead>
+          <tr>
+            <th>Session</th>
+            <th>Tier</th>
+            <th>Tokens in / out</th>
+            <th>Cost</th>
+            <th>Updated</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for s in sessions %}
+            <tr>
+              <td>
+                <a class="text-accent" href="{% url 'brainconfig:chat-session' s.pk %}">
+                  {{ s.title|default:"(empty session)"|truncatechars:80 }}
+                </a>
+              </td>
+              {% comment %}
+                Tier badges follow the browser page's visibility mapping:
+                public = ok, agents-only = info, private = ink. Red is
+                reserved for problems — a private session is protected,
+                not broken.
+              {% endcomment %}
+              <td class="whitespace-nowrap">
+                <span class="badge {% if s.tier == 'public' %}badge-ok{% elif s.tier == 'private' %}badge-ink{% else %}badge-info{% endif %}">{{ s.tier }}</span>
+              </td>
+              <td class="whitespace-nowrap text-xs font-mono text-muted">{{ s.total_input_tokens }} / {{ s.total_output_tokens }}</td>
+              <td class="whitespace-nowrap text-xs font-mono text-muted">${{ s.total_cost_usd|floatformat:4 }}</td>
+              <td class="whitespace-nowrap text-xs font-mono text-muted">{{ s.updated_at|date:"M j, H:i" }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    {% if page_obj.paginator.num_pages > 1 %}
+      <nav class="mt-4 flex flex-wrap items-center justify-between gap-3" aria-label="Pagination">
+        <span class="text-xs text-muted">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }} · {{ page_obj.paginator.count }} sessions</span>
+        <div class="flex gap-2">
+          {% if page_obj.has_previous %}
+            <a class="btn-ghost btn-sm" href="?page={{ page_obj.previous_page_number }}">&larr; Previous</a>
+          {% endif %}
+          {% if page_obj.has_next %}
+            <a class="btn-ghost btn-sm" href="?page={{ page_obj.next_page_number }}">Next &rarr;</a>
+          {% endif %}
+        </div>
+      </nav>
+    {% endif %}
+  {% else %}
+    <div class="empty-state">
+      <p class="empty-state-title">No sessions yet</p>
+      <p class="max-w-md text-sm">
+        Pick a tier above and start one — the reader agent answers from that
+        tier's snapshot, exactly what a consumer key at that tier would see.
+      </p>
+    </div>
+  {% endif %}
+{% endblock %}

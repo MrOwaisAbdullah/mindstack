@@ -1,0 +1,86 @@
+{% load i18n %}
+{% comment %}
+  schema table partial.
+
+  Parameters:
+    title     — section heading ("Input" / "Output")
+    fields    — list[SchemaField]
+    empty_msg — fallback text when fields is empty
+
+  Each row renders name / type / required-pill / default / description
+  / constraints. When `field.nested` is non-empty (object<...>), the
+  expanded sub-table renders inside a <details> below the row.
+{% endcomment %}
+<section class="mt-8">
+  <h2 class="text-base font-semibold text-zinc-900 dark:text-zinc-50">{{ title }}</h2>
+  {% if fields %}
+    <div class="mt-3 overflow-hidden rounded-xl border border-zinc-200 dark:border-zinc-800">
+      <table class="w-full text-sm">
+        <thead class="bg-zinc-50 dark:bg-zinc-900 text-start text-xs uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+          <tr>
+            <th class="px-4 py-2 font-medium">{% trans "Field" %}</th>
+            <th class="px-4 py-2 font-medium">{% trans "Type" %}</th>
+            <th class="px-4 py-2 font-medium">{% trans "Required" %}</th>
+            <th class="px-4 py-2 font-medium">{% trans "Default" %}</th>
+            <th class="px-4 py-2 font-medium">{% trans "Description" %}</th>
+          </tr>
+        </thead>
+        <tbody class="bg-white dark:bg-zinc-950 divide-y divide-zinc-200 dark:divide-zinc-800">
+          {% for f in fields %}
+            <tr>
+              <td class="px-4 py-3 align-top font-mono text-xs text-zinc-900 dark:text-zinc-100">{{ f.name }}</td>
+              <td class="px-4 py-3 align-top font-mono text-xs text-zinc-700 dark:text-zinc-300">{{ f.type_label }}</td>
+              <td class="px-4 py-3 align-top">
+                {% if f.required %}
+                  <span class="inline-flex items-center rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-rose-700 dark:bg-rose-950 dark:text-rose-400">required</span>
+                {% else %}
+                  <span class="text-[10px] text-zinc-400">optional</span>
+                {% endif %}
+              </td>
+              <td class="px-4 py-3 align-top font-mono text-xs text-zinc-500 dark:text-zinc-400">{% if f.default is None %}—{% else %}{{ f.default }}{% endif %}</td>
+              <td class="px-4 py-3 align-top text-xs text-zinc-600 dark:text-zinc-400">
+                {{ f.description|default:"" }}
+                {% if f.constraints %}
+                  <div class="mt-1 flex flex-wrap gap-1">
+                    {% for c in f.constraints %}
+                      <span class="inline-flex items-center rounded bg-zinc-100 px-1.5 py-0.5 font-mono text-[10px] text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">{{ c }}</span>
+                    {% endfor %}
+                  </div>
+                {% endif %}
+                {% if f.nested %}
+                  <details class="mt-2">
+                    <summary class="cursor-pointer text-[11px] text-brand-600 hover:underline dark:text-brand-400">View nested fields ({{ f.nested|length }})</summary>
+                    <div class="mt-2 overflow-x-auto rounded border border-zinc-200 dark:border-zinc-800">
+                      <table class="w-full text-xs">
+                        <thead class="bg-zinc-50 text-start text-[10px] uppercase tracking-wider text-zinc-500 dark:bg-zinc-900 dark:text-zinc-400">
+                          <tr>
+                            <th class="px-3 py-1.5 font-medium">Field</th>
+                            <th class="px-3 py-1.5 font-medium">Type</th>
+                            <th class="px-3 py-1.5 font-medium">Req</th>
+                            <th class="px-3 py-1.5 font-medium">Description</th>
+                          </tr>
+                        </thead>
+                        <tbody class="divide-y divide-zinc-200 dark:divide-zinc-800">
+                          {% for n in f.nested %}
+                            <tr>
+                              <td class="px-3 py-1.5 align-top font-mono text-[11px] text-zinc-900 dark:text-zinc-100">{{ n.name }}</td>
+                              <td class="px-3 py-1.5 align-top font-mono text-[11px] text-zinc-700 dark:text-zinc-300">{{ n.type_label }}</td>
+                              <td class="px-3 py-1.5 align-top text-[10px] {% if n.required %}text-rose-700 dark:text-rose-400{% else %}text-zinc-400{% endif %}">{% if n.required %}yes{% else %}no{% endif %}</td>
+                              <td class="px-3 py-1.5 align-top text-[11px] text-zinc-600 dark:text-zinc-400">{{ n.description|default:"" }}</td>
+                            </tr>
+                          {% endfor %}
+                        </tbody>
+                      </table>
+                    </div>
+                  </details>
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <p class="mt-3 rounded-xl border border-dashed border-zinc-200 px-4 py-6 text-center text-sm text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">{{ empty_msg }}</p>
+  {% endif %}
+</section>

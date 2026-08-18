@@ -1,0 +1,59 @@
+{% comment %}
+  Cookie-consent banner — only shown when analytics is configured AND the
+  visitor hasn't decided yet.
+
+  Gate: `GOOGLE_ANALYTICS_ID` is set (else there's nothing to consent to) and
+  the `analytics_consent` cookie is absent (neither "granted" nor "denied").
+  Once the visitor clicks a button the cookie is written for 180 days, so the
+  banner doesn't reappear on subsequent visits.
+
+  Flow:
+    - Accept  → write `analytics_consent=granted`, then reload. On reload
+      templates/partials/_analytics.html sees the cookie and loads gtag.js.
+    - Decline → write `analytics_consent=denied`, hide the banner. gtag.js
+      never loads.
+
+  The cookie is set client-side (document.cookie) via the nonce'd helper
+  below so it stays CSP-compliant; `Secure` is added only over HTTPS so the
+  flow still works on the plain-HTTP dev server. Alpine handles show/hide.
+{% endcomment %}
+{% load i18n security_tags %}
+{% if GOOGLE_ANALYTICS_ID and not request.COOKIES.analytics_consent %}
+  <div x-data="{ open: true }"
+       x-show="open"
+       x-cloak
+       role="dialog"
+       aria-live="polite"
+       aria-label="{% trans 'Cookie consent' %}"
+       class="fixed inset-x-0 bottom-0 z-50 border-t border-zinc-200 bg-white/95 px-4 py-3 shadow-lg backdrop-blur dark:border-zinc-800 dark:bg-zinc-900/95">
+    <div class="mx-auto flex max-w-5xl flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <p class="text-sm text-zinc-600 dark:text-zinc-300">
+        {% blocktrans trimmed %}
+          We use Google Analytics to understand aggregate, anonymized usage.
+          Analytics cookies are only set if you accept. See our
+          <a href="/privacy/" class="underline hover:no-underline">privacy policy</a>.
+        {% endblocktrans %}
+      </p>
+      <div class="flex shrink-0 gap-2">
+        <button type="button"
+                @click="window.__analyticsConsent('denied'); open = false"
+                class="rounded-md border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-100 focus:outline-none focus:ring-2 focus:ring-zinc-400 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800">
+          {% trans "Decline" %}
+        </button>
+        <button type="button"
+                @click="window.__analyticsConsent('granted'); window.location.reload()"
+                class="rounded-md bg-brand-500 px-3 py-1.5 text-sm font-semibold text-zinc-950 hover:bg-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-400">
+          {% trans "Accept" %}
+        </button>
+      </div>
+    </div>
+  </div>
+  <script nonce="{% csp_nonce %}">
+    window.__analyticsConsent = function (value) {
+      var secure = window.location.protocol === "https:" ? "; Secure" : "";
+      document.cookie =
+        "analytics_consent=" + value +
+        "; path=/; max-age=15552000; SameSite=Lax" + secure;
+    };
+  </script>
+{% endif %}

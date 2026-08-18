@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Sign in — {{ APP_NAME }}{% endblock %}
+{% block body %}
+<main class="min-h-screen flex flex-col items-center justify-center px-6">
+  <a href="{% url 'home' %}" class="select-none">
+    <img src="{% static 'img/brain-hero.svg' %}" alt="" class="w-24 h-24" draggable="false" />
+  </a>
+  <h1 class="home-title mt-4 text-3xl font-bold tracking-tight">{{ APP_NAME }}</h1>
+
+  <form method="post" class="login-card mt-8 w-full max-w-sm p-8">
+    {% csrf_token %}
+    {% if form.non_field_errors or form.errors %}
+      <p class="login-error mb-4 px-4 py-3 text-sm">
+        Wrong username or password.
+      </p>
+    {% endif %}
+    <label for="id_username" class="block text-sm font-medium">Username</label>
+    <input type="text" name="username" id="id_username" autofocus autocomplete="username"
+           required class="login-input mt-1 mb-4 block w-full px-4 py-2.5 text-sm" />
+    <label for="id_password" class="block text-sm font-medium">Password</label>
+    <input type="password" name="password" id="id_password" autocomplete="current-password"
+           required class="login-input mt-1 block w-full px-4 py-2.5 text-sm" />
+    <input type="hidden" name="next" value="{{ next }}" />
+    <button type="submit" class="home-cta mt-6 w-full inline-flex items-center justify-center px-8 py-3 text-sm font-semibold">
+      Sign in
+    </button>
+  </form>
+</main>
+{% endblock %}

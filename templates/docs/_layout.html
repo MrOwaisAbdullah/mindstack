@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% comment %}
+  Public docs layout — the same chrome as the ops layout, deliberately:
+  sidebar (endpoint catalog + guides), mobile-only topbar, content.
+
+  The topbar is `lg:hidden` for the same reason ops made it so — on
+  desktop it was a 56px band holding one link, in a different surface
+  colour than the content under it, and the sidebar already carries the
+  brand. It still exists on mobile because it holds the drawer toggle;
+  the cross-app pivot it used to show lives in the sidebar's "Server"
+  section now (apps/docs/context.py).
+
+  Pages extending this provide:
+    {% block page_title %}    — endpoint name / guide title
+    {% block page_subtitle %} — verb + path / guide subtitle
+    {% block content %}       — main page content (schema, tabs, try-it, …)
+    {% block content_width %} — override when max-w-4xl is too tight
+{% endcomment %}
+{% load static %}
+{% load ui i18n %}
+
+{% block title %}{% block page_title_tag %}{% trans "Docs" %}{% endblock %} · {{ APP_NAME }}{% endblock %}
+
+{% block head_extra %}
+  <script defer src="{% static 'js/code-copy.js' %}"></script>
+{% endblock %}
+
+{% block body %}
+<div x-data="{drawerOpen: false}" x-on:keydown.escape.window="drawerOpen = false" class="min-h-screen bg-surface-2 text-ink">
+  {% include "partials/_sidebar.html" with nav_sections=docs_nav_sections %}
+
+  <div class="lg:ps-64">
+    {# Mobile-only: it carries the drawer toggle; on lg+ content starts at the top. #}
+    {% include "partials/_topbar.html" with title=APP_NAME nav_links=docs_top_links show_drawer=True topbar_class="lg:hidden" %}
+
+    <main id="main-content" class="px-4 py-6 sm:px-6 lg:px-8 lg:py-8" role="main">
+      <div class="mx-auto {% block content_width %}max-w-4xl{% endblock %}">
+        <header class="mb-6">
+          <h1 class="page-title">
+            {% block page_title %}{% trans "Docs" %}{% endblock %}
+          </h1>
+          {% block page_subtitle %}{% endblock %}
+        </header>
+
+        {% include "partials/_flash.html" %}
+
+        <div class="prose prose-zinc max-w-none dark:prose-invert">
+          {% block content %}{% endblock %}
+        </div>
+      </div>
+    </main>
+  </div>
+
+  {# After the topbar in DOM order so equal z paints over it; sidebar is z-40. #}
+  <div x-show="drawerOpen" x-cloak x-on:click="drawerOpen = false"
+       class="scrim" aria-hidden="true"></div>
+
+  {% include "partials/_toast.html" %}
+</div>
+{% endblock %}

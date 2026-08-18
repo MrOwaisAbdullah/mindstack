@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="BrainOutside">
+  <!--
+    The small mark: the brain-hero silhouette redrawn on a 32px grid.
+
+    It is a SEPARATE file from brain-hero.svg on purpose. The hero is a
+    320-unit illustration with eighteen r=3.5 synapse nodes, 1.6-unit
+    strokes and a radial glow; at 16px every one of those is sub-pixel
+    and the whole thing collapses into an indigo smudge. Same identity,
+    different level of detail — which is what a favicon is for.
+
+    Candidates with a core dot, or with one node per hemisphere, were
+    drawn and rendered at 16/20/24px before this one was chosen: at tab
+    size the extra element merges with the fissure into a vertical blur.
+    The silhouette and the fissure are what still read as a brain, so
+    they are all that is left.
+
+    The fill/stroke follow prefers-color-scheme because a favicon lives
+    in the BROWSER's chrome, which follows the OS — not the app's `.dark`
+    class. The in-app copy of this mark is templates/partials/_brand_mark.html,
+    which uses currentColor so it follows the app's own theme toggle.
+    Keep the two paths in sync.
+  -->
+  <style>
+    .bm-fill { fill: #fffef7; }
+    .bm-line { stroke: #6366f1; }
+    @media (prefers-color-scheme: dark) {
+      /* --surface and --accent from the app's dark theme. */
+      .bm-fill { fill: #14141f; }
+      .bm-line { stroke: #818cf8; }
+    }
+  </style>
+  <g transform="translate(0 1.8)">
+    <path class="bm-fill bm-line"
+          d="M16 3.6 C 13.1 2.1, 9.5 3.2, 8.3 6.0
+             C 5.1 6.7, 3.3 9.5, 4.4 12.2
+             C 2.5 14.0, 3.0 17.1, 5.2 18.5
+             C 5.2 21.5, 7.6 23.5, 10.4 22.7
+             C 11.6 25.5, 14.6 26.5, 16 24.6
+             C 17.4 26.5, 20.4 25.5, 21.6 22.7
+             C 24.4 23.5, 26.8 21.5, 26.8 18.5
+             C 29.0 17.1, 29.5 14.0, 27.6 12.2
+             C 28.7 9.5, 26.9 6.7, 23.7 6.0
+             C 22.5 3.2, 18.9 2.1, 16 3.6 Z"
+          stroke-width="2.4" stroke-linejoin="round"/>
+    <path class="bm-line" fill="none" stroke-width="1.9" stroke-linecap="round"
+          d="M16 4.4 C 15.1 9.5, 16.9 17.5, 16 24.0"/>
+  </g>
+</svg>

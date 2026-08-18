@@ -1,0 +1,33 @@
+{% comment %}
+  The wordmark's glyph. Inline (not <img src="brain-mark.svg">) for the
+  same reason partials/_nav_icon.html is inline: an <img> is an opaque
+  document, so it cannot see this page's `.dark` class and cannot read
+  --accent. `currentColor` lets the caller tint it with text-* utilities.
+
+  The path is the same drawing as static/img/brain-mark.svg, which is
+  the favicon. That file theme-switches on prefers-color-scheme because
+  it lives in the browser's chrome; this one follows the app's own
+  toggle. Two mechanisms, one shape — keep them in sync.
+
+  Include with `size` (a Tailwind size pair), e.g.
+    {% include "partials/_brand_mark.html" with size="h-5 w-5" %}
+{% endcomment %}
+<svg class="{{ size|default:'h-5 w-5' }} shrink-0 text-accent" viewBox="0 0 32 32"
+     fill="none" stroke="currentColor" aria-hidden="true">
+  {# No fill: at 20px a body adds nothing, and the outline stays crisp on any surface. #}
+  <g transform="translate(0 1.8)">
+    <path d="M16 3.6 C 13.1 2.1, 9.5 3.2, 8.3 6.0
+             C 5.1 6.7, 3.3 9.5, 4.4 12.2
+             C 2.5 14.0, 3.0 17.1, 5.2 18.5
+             C 5.2 21.5, 7.6 23.5, 10.4 22.7
+             C 11.6 25.5, 14.6 26.5, 16 24.6
+             C 17.4 26.5, 20.4 25.5, 21.6 22.7
+             C 24.4 23.5, 26.8 21.5, 26.8 18.5
+             C 29.0 17.1, 29.5 14.0, 27.6 12.2
+             C 28.7 9.5, 26.9 6.7, 23.7 6.0
+             C 22.5 3.2, 18.9 2.1, 16 3.6 Z"
+          stroke-width="2.4" stroke-linejoin="round"/>
+    <path d="M16 4.4 C 15.1 9.5, 16.9 17.5, 16 24.0"
+          stroke-width="1.9" stroke-linecap="round"/>
+  </g>
+</svg>

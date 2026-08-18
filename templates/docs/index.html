@@ -1,0 +1,112 @@
+{% extends "docs/_layout.html" %}
+{% load i18n %}
+{% comment %}
+  Docs index page (registry-driven catalog).
+
+  Layout:
+    1. Search input (Alpine, client-side; instant filter on slug /
+       description / tags via `search_blob`).
+    2. One section per tag with a card grid; cards hide when no
+       match. Empty-result state when every card filters out.
+    3. Empty-catalog state when no endpoints are registered.
+{% endcomment %}
+
+{% block page_title %}{% trans "API reference" %}{% endblock %}
+{% block page_subtitle %}
+  <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
+    {% blocktrans count counter=bundle.total_endpoints %}{{ counter }} endpoint grouped by tag. Click it to see schema, REST/MCP/SDK examples, and try it live.{% plural %}{{ counter }} endpoints grouped by tag. Click any to see schema, REST/MCP/SDK examples, and try it live.{% endblocktrans %}
+  </p>
+{% endblock %}
+
+{% block content %}
+<div x-data="{
+  q: '',
+  matches(blob) { return this.q === '' || blob.includes(this.q.toLowerCase()); },
+  visibleCount() {
+    return Array.from(document.querySelectorAll('[data-blob]')).filter(el => this.matches(el.dataset.blob)).length;
+  }
+}">
+
+  {# 1. Search filter #}
+  <div class="mb-6">
+    <label class="relative block">
+      <span class="sr-only">{% trans "Search endpoints" %}</span>
+      <span class="pointer-events-none absolute start-3 top-1/2 -translate-y-1/2 text-zinc-400" aria-hidden="true">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+      </span>
+      <input
+        type="search"
+        x-model="q"
+        placeholder="{% trans 'Search endpoints by name, description, or tag...' %}"
+        class="w-full rounded-lg border border-zinc-300 bg-white ps-10 pe-3 py-2 text-sm text-zinc-900 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-brand-500 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
+        aria-label="{% trans 'Search endpoints' %}"
+      />
+    </label>
+  </div>
+
+  {# 2. Groups + cards #}
+  {% if bundle.groups %}
+    {% for group in bundle.groups %}
+      <section
+        class="mb-8"
+        x-show="Array.from($el.querySelectorAll('[data-blob]')).some(el => matches(el.dataset.blob))"
+      >
+        <h2 class="mb-3 text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{{ group.label }}</h2>
+        <div class="grid gap-3 sm:grid-cols-2">
+          {% for card in group.cards %}
+            <a
+              href="{% url 'docs:endpoint-detail' card.slug %}"
+              data-blob="{{ card.search_blob }}"
+              x-show="matches('{{ card.search_blob|escapejs }}')"
+              {% comment %}
+                min-w-0 on the GRID ITEM: the truncating slug below reports its
+                full nowrap width as min-content, the single-column mobile track
+                adopts it, and every card widens past the viewport (408px at 375).
+                min-w-0 on the inner flex row alone does not stop the propagation.
+              {% endcomment %}
+              class="block min-w-0 rounded-xl border border-zinc-200 bg-white p-4 transition hover:border-brand-300 hover:shadow-sm dark:border-zinc-800 dark:bg-zinc-950 dark:hover:border-brand-700"
+            >
+              <div class="flex items-center justify-between gap-2">
+                <div class="flex items-center gap-2 min-w-0">
+                  <span class="inline-flex items-center rounded bg-brand-100 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-brand-700 dark:bg-brand-950 dark:text-brand-400">{{ card.method }}</span>
+                  <code class="font-mono text-sm font-medium text-zinc-900 dark:text-zinc-100 truncate">{{ card.slug }}</code>
+                </div>
+                <div class="flex flex-shrink-0 items-center gap-1">
+                  {% if card.deprecated %}
+                    <span class="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-amber-700 dark:bg-amber-950 dark:text-amber-400">{% trans "deprecated" %}</span>
+                  {% endif %}
+                </div>
+              </div>
+              {% if card.description %}
+                <p class="mt-2 line-clamp-2 text-sm text-zinc-600 dark:text-zinc-400">{{ card.description }}</p>
+              {% endif %}
+              {% if card.tags %}
+                <div class="mt-3 flex flex-wrap gap-1">
+                  {% for tag in card.tags %}
+                    <span class="inline-flex items-center rounded bg-zinc-100 px-1.5 py-0.5 font-mono text-[10px] text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">{{ tag }}</span>
+                  {% endfor %}
+                </div>
+              {% endif %}
+            </a>
+          {% endfor %}
+        </div>
+      </section>
+    {% endfor %}
+
+    {# Empty result state — only shows when every card has filtered out #}
+    <div
+      x-show="q !== '' && visibleCount() === 0"
+      x-cloak
+      class="rounded-xl border border-dashed border-zinc-200 px-6 py-12 text-center text-sm text-zinc-500 dark:border-zinc-800 dark:text-zinc-400"
+    >
+      {% blocktrans %}No endpoints match "<span class="font-mono" x-text="q"></span>". Try a different search term.{% endblocktrans %}
+    </div>
+  {% else %}
+    <div class="rounded-xl border border-dashed border-zinc-200 px-6 py-16 text-center dark:border-zinc-800">
+      <p class="text-sm text-zinc-500 dark:text-zinc-400">
+        {% blocktrans %}No endpoints registered yet. Drop a new app under <code class="text-xs">apps/app_endpoints/&lt;slug&gt;/</code> and add the <code class="text-xs">@endpoint(slug=...)</code> decorator to make it appear here.{% endblocktrans %}
+      </p>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

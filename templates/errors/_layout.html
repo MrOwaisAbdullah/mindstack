@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% load i18n %}
+{% comment %}
+  minimal layout for error pages. No sidebar, no topbar.
+  Centers the content + carries the request_id for support.
+{% endcomment %}
+{% block body %}
+<div class="flex min-h-screen flex-col bg-zinc-50 dark:bg-zinc-950">
+  <header class="px-6 py-5">
+    <a href="/" class="inline-flex items-center gap-2 text-sm font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
+      <span class="inline-block h-6 w-6 rounded-md bg-brand-500"></span>
+      <span>{{ APP_NAME }}</span>
+    </a>
+  </header>
+  <main id="main-content" class="flex flex-1 items-center justify-center px-6 py-12" role="main">
+    <div class="w-full max-w-xl text-center">
+      {% block illustration %}{% endblock %}
+      <h1 class="mt-6 text-3xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
+        {% block error_title %}{% trans "Something went wrong" %}{% endblock %}
+      </h1>
+      <p class="mt-3 text-sm text-zinc-500 dark:text-zinc-400">
+        {% block error_body %}{% endblock %}
+      </p>
+      {% block error_actions %}
+        <div class="mt-8 flex flex-wrap justify-center gap-2">
+          <a href="/" class="btn btn-primary text-sm">{% trans "Back to home" %}</a>
+        </div>
+      {% endblock %}
+      {% if request_id %}
+        <p class="mt-10 text-xs text-zinc-400 dark:text-zinc-500">
+          {% blocktrans with rid=request_id %}Reference: <code class="font-mono text-zinc-500 dark:text-zinc-400">{{ rid }}</code>{% endblocktrans %}
+        </p>
+      {% endif %}
+    </div>
+  </main>
+</div>
+{% endblock %}

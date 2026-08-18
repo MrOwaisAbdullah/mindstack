@@ -1,0 +1,259 @@
+{% extends "ops/_layout.html" %}
+
+{% block page_title_tag %}Setup &amp; health{% endblock %}
+{% block page_title %}Setup &amp; health{% endblock %}
+{% block page_subtitle %}
+  <p class="mt-1 text-sm text-muted">
+    What this server knows about its own configuration, and the actions that
+    fix it. Failures show the underlying error, not a summary of it.
+  </p>
+{% endblock %}
+{% block content_width %}max-w-[1600px]{% endblock %}
+
+{% comment %}
+  One chip on the title line carries the verdict (dashboard grammar): exact
+  problem counts when something is wrong, a single green "all passing" when
+  nothing is. Red is reserved for actual failures; warnings stay amber.
+{% endcomment %}
+{% block page_actions %}
+  {% if n_danger %}
+    <span class="badge badge-danger">
+      <span class="dot dot-danger"></span>
+      {{ n_danger }} failing{% if n_warn %} &middot; {{ n_warn }} warning{{ n_warn|pluralize }}{% endif %}
+    </span>
+  {% elif n_warn %}
+    <span class="badge badge-warn">
+      <span class="dot dot-warn"></span>
+      {{ n_warn }} warning{{ n_warn|pluralize }}
+    </span>
+  {% else %}
+    <span class="badge badge-ok">
+      <span class="dot dot-ok"></span>
+      All checks passing
+    </span>
+  {% endif %}
+{% endblock %}
+
+{% block content %}
+<div x-data="healthPage()" x-init="poll()">
+
+  {# ---- running / recent repair jobs ---- #}
+  <template x-if="Object.keys(jobs).length">
+    <div class="card mb-4 xl:mb-6">
+      <template x-for="(j, name) in jobs" :key="name">
+        <div class="card-row flex items-start gap-2.5">
+          <span class="dot mt-1.5"
+                :class="{'dot-live': j.state === 'running', 'dot-ok': j.state === 'done', 'dot-danger': j.state === 'failed'}"></span>
+          <div class="min-w-0 flex-1">
+            <div class="flex flex-wrap items-center gap-2 text-sm">
+              <span class="font-medium" x-text="j.label"></span>
+              <span class="font-mono text-xs text-muted" x-text="j.state"></span>
+            </div>
+            <div x-show="j.result" class="mt-1 font-mono text-xs text-muted" x-text="j.result"></div>
+            <pre x-show="j.error" class="pane-terminal mt-2 overflow-x-auto p-3 text-xs"
+                 x-text="j.error"></pre>
+          </div>
+          <form method="post" x-show="j.state !== 'running'" class="shrink-0">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="clear_job" />
+            <input type="hidden" name="job" :value="name" />
+            <button type="submit" class="btn-ghost btn-sm">Dismiss</button>
+          </form>
+        </div>
+      </template>
+    </div>
+  </template>
+
+  <div class="grid gap-4 xl:grid-cols-12 xl:gap-6">
+    <div class="min-w-0 space-y-4 xl:col-span-8 xl:space-y-6">
+
+      {% comment %}
+        Triage, not a flat list: problems and their fix buttons in one card,
+        everything healthy in a quieter one below. Severity still sorts the
+        rows (the view orders danger before warn). On mobile the action
+        drops below the text — side-by-side crushed multi-sentence details
+        into an unreadable ~180px column at 375px.
+      {% endcomment %}
+      <div class="card">
+        <div class="card-header">
+          <h2 class="card-title">Needs attention</h2>
+        </div>
+        {% for c in problems %}
+          <div class="card-row flex flex-col gap-3 sm:flex-row sm:justify-between">
+            <div class="flex min-w-0 items-start gap-2.5">
+              <span class="dot mt-1.5 {% if c.level == 'danger' %}dot-danger{% else %}dot-warn{% endif %}"></span>
+              <div class="min-w-0">
+                <div class="text-sm font-medium {% if c.level == 'danger' %}text-danger-ink{% endif %}">{{ c.title }}</div>
+                <p class="mt-1 max-w-2xl text-sm text-muted">{{ c.detail }}</p>
+              </div>
+            </div>
+            {% if c.action == "replace_clone" %}
+              <div class="shrink-0">
+                <form method="post" @submit="if (!confirm($refs.dangerText.textContent.trim())) $event.preventDefault(); else defer('replace_clone')">
+                  {% csrf_token %}
+                  <span x-ref="dangerText" class="hidden">{{ runnable.replace_clone.danger }}</span>
+                  <button type="submit" name="action" value="replace_clone"
+                          :disabled="busy('replace_clone')"
+                          class="btn-danger">Replace the clone</button>
+                </form>
+              </div>
+            {% elif c.action == "generate_webhook_secret" %}
+              <div class="shrink-0">
+                <form method="post">
+                  {% csrf_token %}
+                  <button type="submit" name="action" value="generate_webhook_secret"
+                          class="btn-primary">Generate a secret</button>
+                </form>
+              </div>
+            {% elif c.action == "ack_backup" %}
+              <div class="shrink-0">
+                <form method="post">
+                  {% csrf_token %}
+                  <button type="submit" name="action" value="ack_backup"
+                          class="btn-ghost">I have a backup</button>
+                </form>
+              </div>
+            {% elif c.link_step %}
+              <div class="shrink-0">
+                <a href="{% url 'setup:step' slug=c.link_step %}" class="btn-ghost">Set it up</a>
+              </div>
+            {% endif %}
+          </div>
+        {% empty %}
+          <div class="card-row flex items-start gap-2.5">
+            <span class="dot mt-1.5 dot-ok"></span>
+            <div class="min-w-0">
+              <div class="text-sm font-medium">Nothing needs attention</div>
+              <p class="mt-1 text-sm text-muted">
+                When a check degrades it appears here, with the action that fixes it.
+              </p>
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <h2 class="card-title">No action needed</h2>
+          <span class="badge badge-ok">{{ passing|length }} check{{ passing|length|pluralize }}</span>
+        </div>
+        {% for c in passing %}
+          <div class="card-row flex items-start gap-2.5">
+            <span class="dot mt-1.5 {% if c.level == 'ok' %}dot-ok{% else %}dot-muted{% endif %}"></span>
+            <div class="min-w-0">
+              <div class="text-sm font-medium">{{ c.title }}</div>
+              <p class="mt-0.5 text-xs text-muted">{{ c.detail }}</p>
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+
+    {# ---- the brain repo, its credentials, and the actions ---- #}
+    <div class="min-w-0 xl:col-span-4">
+      <div class="card">
+        <div class="card-header">
+          <h2 class="card-title">Brain repository</h2>
+        </div>
+
+        {# Single column, not .meta-grid: two columns in this rail crush URLs into ~150px cells. #}
+        <div class="card-row">
+          <dl class="space-y-2 text-sm">
+            <div>
+              <dt class="meta-label">Configured remote</dt>
+              <dd class="meta-value">{{ repo_url|default:"unset" }}</dd>
+            </div>
+            <div>
+              <dt class="meta-label">Read credential</dt>
+              <dd class="meta-value">{{ git_status.read.source }}</dd>
+            </div>
+            <div>
+              <dt class="meta-label">Write credential</dt>
+              <dd class="meta-value">{{ git_status.write.source }}</dd>
+            </div>
+            <div>
+              <dt class="meta-label">Webhook endpoint</dt>
+              <dd class="meta-value">{{ webhook_url }}</dd>
+            </div>
+          </dl>
+        </div>
+
+        {% if deploy_key %}
+          <div class="card-row" x-data="{copied: false, shown: false}">
+            <button type="button" class="text-sm link-accent"
+                    @click="shown = !shown" x-text="shown ? 'Hide deploy key' : 'Show deploy key'">Show deploy key</button>
+            <div x-show="shown" x-cloak class="mt-2">
+              <textarea readonly rows="3" x-ref="key"
+                        class="field-textarea field-mono text-xs">{{ deploy_key }}</textarea>
+              <button type="button" class="btn-ghost btn-sm mt-2"
+                      @click="navigator.clipboard.writeText($refs.key.value).then(() => {copied = true; setTimeout(() => copied = false, 2000)})"
+                      x-text="copied ? 'Copied' : 'Copy'">Copy</button>
+            </div>
+          </div>
+        {% endif %}
+
+        {% if webhook_set %}
+          <div class="card-row" x-data="{secret: '', shown: false}">
+            <button type="button" class="text-sm link-accent"
+                    @click="if (!shown) { fetch('{% url 'brainconfig:webhook-secret' %}', {method: 'POST', headers: {'X-CSRFToken': document.cookie.match(/csrftoken=([^;]+)/)?.[1] || ''}}).then(r => r.json()).then(d => secret = d.secret) } ; shown = !shown"
+                    x-text="shown ? 'Hide webhook secret' : 'Show webhook secret'">Show webhook secret</button>
+            <div x-show="shown" x-cloak
+                 class="mt-2 overflow-x-auto rounded-lg border border-line bg-surface-2 px-3 py-2 font-mono text-xs"
+                 x-text="secret || 'loading…'"></div>
+            <p class="mt-2 text-xs text-muted">
+              Paste into your repository &rarr; Settings &rarr; Webhooks, with the payload
+              URL above and content type <code>application/json</code>.
+            </p>
+          </div>
+        {% endif %}
+
+        {% comment %}
+          Rotate lives in its own form: the shared @submit would let any
+          submitter through, and this one invalidates the current key with
+          no undo — it earns the same confirm gate as replacing the clone.
+        {% endcomment %}
+        <div class="card-row flex flex-wrap items-center gap-2">
+          <form method="post" class="flex flex-wrap gap-2" @submit="defer($event.submitter?.value)">
+            {% csrf_token %}
+            <button type="submit" name="action" value="verify_read" :disabled="busy('verify_read')"
+                    class="btn-primary">Verify read access</button>
+            <button type="submit" name="action" value="pull_now" :disabled="busy('pull_now')"
+                    class="btn-ghost">Pull now</button>
+            <button type="submit" name="action" value="rebuild_index" :disabled="busy('rebuild_index')"
+                    class="btn-ghost">Rebuild index</button>
+          </form>
+          <form method="post" @submit="if (!confirm('The current deploy key stops working the moment a new one is generated, and GitHub reads fail until you paste the replacement into the repository. Rotate it?')) $event.preventDefault()">
+            {% csrf_token %}
+            <button type="submit" name="action" value="rotate_deploy_key"
+                    class="btn-danger-ghost">Rotate deploy key</button>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script nonce="{{ csp_nonce }}">
+  function healthPage() {
+    return {
+      jobs: {},
+      pending: null,
+      // Buttons disable only AFTER the submit event, because a form's data
+      // set excludes disabled controls — disabling synchronously would drop
+      // the submitter's name/value and the view would see no action at all.
+      defer(name) { if (name) setTimeout(() => { this.pending = name; }); },
+      busy(name) {
+        return this.pending === name || this.jobs[name]?.state === 'running';
+      },
+      poll() {
+        setInterval(async () => {
+          try {
+            const r = await fetch('{% url "brainconfig:health-jobs" %}');
+            if (r.ok) { this.jobs = (await r.json()).jobs; }
+          } catch (e) { /* transient */ }
+        }, 2000);
+      },
+    };
+  }
+</script>
+{% endblock %}

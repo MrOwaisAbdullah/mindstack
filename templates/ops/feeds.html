@@ -1,0 +1,154 @@
+{% extends "ops/_layout.html" %}
+
+{% block page_title_tag %}Feed queue{% endblock %}
+{% block page_title %}Feed queue{% endblock %}
+{% block page_subtitle %}
+  <p class="mt-1 text-sm text-muted">
+    {{ pending_count }} pending · {{ total }} total — every write to the brain starts here and waits for approval.
+  </p>
+{% endblock %}
+{% block content_width %}max-w-[1600px]{% endblock %}
+
+{% block content %}
+  {% comment %}
+    The UI channel of the write door. Collapsed once the queue has
+    history; open on an empty queue so the first capture is obvious.
+    Submitting can fetch the URL server-side (slow), so the button arms
+    a DEFERRED busy-disable — setTimeout, never synchronous, per the
+    Alpine submit gotchas in CLAUDE.md — to stop double captures.
+  {% endcomment %}
+  <details class="card mb-6" {% if total == 0 %}open{% endif %}>
+    <summary class="cursor-pointer select-none px-4 py-3 text-sm font-medium">Propose a feed</summary>
+    <form method="post" x-data="{busy: false}" @submit="setTimeout(() => busy = true)"
+          class="grid gap-3 border-t border-line px-4 py-4">
+      {% csrf_token %}
+      <div class="flex flex-wrap gap-3">
+        <label class="text-sm">
+          <span class="mb-1 block text-xs text-muted">Source kind</span>
+          <select name="source_kind" class="field-select">
+            {% for k in source_kinds %}<option value="{{ k }}">{{ k }}</option>{% endfor %}
+          </select>
+        </label>
+        <label class="min-w-40 grow text-sm">
+          <span class="mb-1 block text-xs text-muted">Title</span>
+          <input type="text" name="title" maxlength="300" class="field-input" />
+        </label>
+        <label class="text-sm">
+          <span class="mb-1 block text-xs text-muted">Source id (optional, kebab-case)</span>
+          <input type="text" name="source_id" maxlength="120" placeholder="derived when empty"
+                 class="field-input field-mono" />
+        </label>
+      </div>
+      <label class="text-sm">
+        <span class="mb-1 block text-xs text-muted">URL — fetched server-side when no content is pasted</span>
+        <input type="url" name="url" maxlength="2000" class="field-input field-mono" />
+      </label>
+      <label class="text-sm">
+        <span class="mb-1 block text-xs text-muted">Content — transcript / post body (cap {{ payload_max_kb }} KB); pasting skips the fetch</span>
+        <textarea name="content" rows="6" class="field-textarea field-mono"></textarea>
+      </label>
+      <label class="text-sm">
+        <span class="mb-1 block text-xs text-muted">Notes for the feeder — what matters in this source</span>
+        <input type="text" name="notes" maxlength="2000" class="field-input" />
+      </label>
+      <div>
+        <button type="submit" :disabled="busy" class="btn-primary">Capture as pending</button>
+      </div>
+    </form>
+  </details>
+
+  {% comment %}
+    Explicit Filter button, same pattern as the brain browser — NOT an
+    onchange auto-submit: an inline handler is inline script and the
+    enforced CSP (script-src 'self' 'nonce') drops it, so the old
+    select changed nothing and the form had no other way to submit.
+  {% endcomment %}
+  <form method="get" class="card mb-4 flex flex-wrap items-end gap-3 p-4">
+    <label class="text-sm">
+      <span class="mb-1 block text-xs text-muted">Status</span>
+      <select name="status" class="field-select">
+        <option value="">all</option>
+        {% for s in statuses %}<option value="{{ s }}" {% if s == f_status %}selected{% endif %}>{{ s }}</option>{% endfor %}
+      </select>
+    </label>
+    <button type="submit" class="btn-primary">Filter</button>
+    <a href="{% url 'brainconfig:feeds' %}" class="btn-ghost">Reset</a>
+  </form>
+
+  <div class="card table-wrap">
+    <table class="table table-hover">
+      <thead>
+        <tr>
+          <th>Source</th>
+          <th>Channel</th>
+          <th>Status</th>
+          <th>Payload</th>
+          <th>Created</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for feed in feeds %}
+          <tr>
+            <td>
+              <a class="font-mono text-accent" href="{% url 'brainconfig:feed-detail' feed.pk %}">{{ feed.source_id }}</a>
+              {% if feed.raw_payload.title %}<div class="mt-0.5 text-xs text-muted">{{ feed.raw_payload.title|truncatechars:80 }}</div>{% endif %}
+            </td>
+            <td class="whitespace-nowrap text-muted">{{ feed.channel }}</td>
+            <td>
+              {% comment %}
+                Status colour code: warn = waiting on the operator,
+                info = in flight / worth a look, ok = landed, muted = a
+                closed human decision (rejected is not a problem), and
+                danger ONLY for real failures.
+              {% endcomment %}
+              <span class="badge {% if feed.status == 'pending' %}badge-warn{% elif feed.status == 'approving' %}badge-info{% elif feed.status == 'approved' or feed.status == 'edited' %}badge-ok{% elif feed.status == 'rejected' %}badge-muted{% else %}badge-danger{% endif %}"
+                    {% if feed.status == 'failed' and feed.error %}title="{{ feed.error }}"{% endif %}>
+                {{ feed.status }}
+              </span>
+              {% if feed.status == 'pending' %}
+                {% if feed.proposal %}
+                  <span class="badge badge-info ms-1">ready to review</span>
+                {% elif feed.error %}
+                  <span class="badge badge-danger ms-1" title="{{ feed.error }}">extraction failed</span>
+                {% elif feed.extraction_in_flight %}
+                  <span class="badge badge-muted ms-1">extracting</span>
+                {% else %}
+                  <span class="badge badge-muted ms-1">no proposal yet</span>
+                {% endif %}
+                {% if feed.raw_payload.fetch and not feed.raw_payload.fetch.ok %}
+                  <span class="badge badge-danger ms-1">fetch failed</span>
+                {% endif %}
+              {% endif %}
+            </td>
+            <td class="whitespace-nowrap text-xs font-mono text-muted">{{ feed.payload_bytes|filesizeformat }}</td>
+            <td class="whitespace-nowrap text-xs font-mono text-muted">{{ feed.created_at|date:"Y-m-d H:i" }}</td>
+          </tr>
+        {% empty %}
+          <tr>
+            <td colspan="5" class="px-4 py-10 text-center text-muted">
+              {% if f_status %}
+                No {{ f_status }} feeds — <a class="link-accent" href="{% url 'brainconfig:feeds' %}">show all statuses</a>.
+              {% else %}
+                Nothing captured yet — propose a feed above, or send one through the API or MCP write tools; every write waits here for your approval.
+              {% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% if page_obj.paginator.num_pages > 1 %}
+    <nav class="mt-4 flex flex-wrap items-center justify-between gap-3" aria-label="Pagination">
+      <span class="text-xs text-muted">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+      <div class="flex gap-2">
+        {% if page_obj.has_previous %}
+          <a class="btn-ghost btn-sm" href="?{% if filter_qs %}{{ filter_qs }}&amp;{% endif %}page={{ page_obj.previous_page_number }}">&larr; Previous</a>
+        {% endif %}
+        {% if page_obj.has_next %}
+          <a class="btn-ghost btn-sm" href="?{% if filter_qs %}{{ filter_qs }}&amp;{% endif %}page={{ page_obj.next_page_number }}">Next &rarr;</a>
+        {% endif %}
+      </div>
+    </nav>
+  {% endif %}
+{% endblock %}

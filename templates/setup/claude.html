@@ -1,0 +1,78 @@
+{% extends "setup/_layout.html" %}
+
+{% block step_title %}Connect Claude{% endblock %}
+{% block step_blurb %}
+  Used to extract notes from what you feed in, and to answer questions
+  against your brain. Everything else on this server works without it.
+{% endblock %}
+
+{% block step_body %}
+  <div class="mb-5 grid gap-3 sm:grid-cols-2 text-sm">
+    <div class="rounded-lg border p-4 border-line">
+      <div class="font-medium">Claude subscription</div>
+      <p class="mt-1 text-muted">
+        Run <code>claude setup-token</code> on your own machine and paste the
+        <code>sk-ant-oat…</code> token. Uses your existing subscription — no
+        API billing.
+      </p>
+    </div>
+    <div class="rounded-lg border p-4 border-line">
+      <div class="font-medium">API key</div>
+      <p class="mt-1 text-muted">
+        A workspace-scoped <code>sk-ant-api…</code> key from the Anthropic
+        console. Set a spend limit there.
+      </p>
+    </div>
+  </div>
+
+  {% if result %}
+    <div class="notice mb-5 {% if result.ok %}notice-ok{% else %}notice-danger{% endif %}">
+      {% if result.ok %}
+        <div class="font-semibold text-signal-ink">Connection OK</div>
+        <div class="mt-1 text-muted font-mono">
+          {{ result.model }} · {{ result.duration_ms }} ms ·
+          {{ result.input_tokens }}/{{ result.output_tokens }} tokens
+        </div>
+      {% else %}
+        <div class="font-semibold text-danger-ink">Connection failed</div>
+        <div class="mt-1 font-mono">{{ result.error }}</div>
+      {% endif %}
+    </div>
+  {% endif %}
+
+  {# Deferred disable — see the note in setup/read.html. #}
+  <form method="post" x-data="{busy: false}" @submit="setTimeout(() => busy = true)">
+    {% csrf_token %}
+    <label for="id_key" class="block text-sm font-medium">Credential</label>
+    <input type="password" name="key" id="id_key" autocomplete="off"
+           placeholder="{% if key_set %}stored — paste a new one to replace{% else %}sk-ant-oat… or sk-ant-api…{% endif %}"
+           class="login-input mt-1 block w-full max-w-md px-4 py-2.5 text-sm font-mono" />
+    <p class="mt-1.5 text-xs text-muted">
+      Stored encrypted — by Continue, or by a test that passes. A failed
+      test stores nothing. The type is detected automatically.
+    </p>
+
+    <div class="mt-5 flex flex-wrap items-center gap-2">
+      <button type="submit" name="action" value="test" :disabled="busy"
+              class="btn-primary px-5 py-2.5"
+              {# :class, not :style — see the note in setup/read.html. #}
+              :class="busy ? 'opacity-60 pointer-events-none' : ''">
+        <span x-text="busy ? 'Testing…' : 'Test connection'">Test connection</span>
+      </button>
+      <button type="submit" name="action" value="continue" :disabled="busy"
+              class="btn-ink btn-lg">
+        Continue
+      </button>
+      <button type="submit" name="action" value="skip" :disabled="busy"
+              class="rounded-lg border px-4 py-2 text-sm border-line text-muted">
+        Skip for now
+      </button>
+    </div>
+    <p class="mt-2 text-xs text-muted">
+      Skipping is fine. Your notes are still served over the API and MCP —
+      that is how a claude.ai connector reads this brain, and it brings its
+      own model. Chat, the reader agent and feed extraction stay off until
+      you add a credential, which you can do later on the Settings page.
+    </p>
+  </form>
+{% endblock %}

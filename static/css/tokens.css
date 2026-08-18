@@ -1,0 +1,152 @@
+/* ============================================================
+   THEME TOKENS — the default "paper" theme: warm paper/cream
+   surfaces, ink text, indigo accent, dark terminal scale for logs.
+
+   THIS FILE IS THE RE-THEMING SURFACE. It is a plain stylesheet loaded
+   before the Tailwind build, NOT part of it, so changing a colour here
+   re-themes the whole app with no toolchain and no rebuild — which
+   matters for self-hosters who have neither.
+
+   It works because static/css/app.css maps every token below into an
+   `@theme` block, so `bg-surface`, `border-line`, `text-muted` and
+   friends are real Tailwind utilities whose values are `var(--surface)`
+   etc. Swap a variable here and every utility that references it
+   follows, including the `.dark` block at the bottom — which is the
+   whole mechanism behind the theme toggle.
+
+   RULES:
+   - Pages style against the SEMANTIC layer (--surface, --ink, --accent),
+     never against a raw primitive and never against a literal hex. A
+     hardcoded colour is invisible in light-mode review and wrong in dark.
+   - Variables only in this file. Actual CSS rules live in app.css, where
+     they land inside Tailwind's cascade layers and so can still be
+     overridden by a utility class. (An unlayered rule beats every
+     layered one regardless of source order — that is a CSS cascade rule,
+     not a Tailwind quirk, and it silently defeats utilities.)
+   - COLOUR only. Geometry (radii, shadows) and font stacks live in
+     app.css's `@theme`, because a theme key cannot be `var()` of its own
+     name, and because colour is the thing people actually re-theme.
+     `--radius-sm` used to live here at 10px, which would have silently
+     redefined Tailwind's built-in `rounded-sm` (0.25rem) the moment
+     anyone used it — the kind of bug that costs an afternoon.
+   ============================================================ */
+
+:root {
+  /* ---- Palette primitives (swap these to re-theme) ---- */
+  --c-paper:   #fffef7;
+  --c-cream:   #faf8f5;
+  --c-ink:     #1a1a2e;
+  --c-muted:   #6b6b7b;
+  --c-teal:    #4db8a8;
+  --c-indigo:        #6366f1;
+  --c-indigo-strong: #4f46e5;
+  --c-violet:  #9b7cc4;
+  --c-yellow:  #f5d76e;
+  --c-coral:   #e8a07a;
+  --c-red:     #ff6b6b;
+
+  /* Terminal dark surfaces (log/code panes). Deliberately FIXED across
+     both themes: a terminal pane is dark in light mode by design, so
+     these are not re-pointed in the `.dark` block below. */
+  --c-ink-900: #0d1117;
+  --c-ink-800: #161b22;
+  --c-ink-700: #21262d;
+  --c-ink-600: #30363d;
+  --c-ink-400: #8b949e;
+  --c-ink-300: #c9d1d9;
+
+  /* ---- Semantic layer ---- */
+  --surface:    var(--c-paper);
+  --surface-2:  var(--c-cream);
+  --surface-ink: var(--c-ink);
+  --ink:        var(--c-ink);
+  --muted:      var(--c-muted);
+  --line:       rgba(26, 26, 46, 0.12);
+
+  --accent:        var(--c-indigo);
+  --accent-strong: var(--c-indigo-strong);
+  --accent-contrast: #ffffff;   /* text that sits ON --accent */
+  --accent-2:   var(--c-violet);
+  --accent-3:   var(--c-coral);
+  --signal:     var(--c-teal);
+  --warn:       var(--c-yellow);
+  --danger:     var(--c-red);
+
+  /* Readable-as-TEXT variants of the status colours. The fills above are
+     tuned to sit behind something — as text on --surface they are far too
+     light: #4db8a8 on #fffef7 is about 2.1:1 and #ff6b6b about 2.8:1, both
+     under the 4.5:1 that body text needs. So status TEXT uses these and
+     status FILLS use the ones above. Getting this wrong is easy and
+     invisible until someone tries to read it. */
+  --signal-ink: #2c8577;
+  --warn-ink:   #8a6d1a;
+  --danger-ink: #c0392b;
+
+  /* ---- Brain-viz categorical palette: one hue per entity kind ----
+     Every value passes the categorical gates against THIS theme's
+     surface (OKLCH lightness band, chroma floor, adjacent-pair CVD
+     separation, normal-vision ΔE ≥ 15, ≥3:1 contrast) — checked with a
+     validator, not by eye. If you re-theme, re-check: a hue that
+     passes on paper can vanish on your surface, which is exactly how
+     the old identity colour (the ink primitive) sat at 1.02:1 in dark
+     mode. rings.css maps these onto dots and swatches via
+     .rings-kind-*; the .dark block below is its own validated set, not
+     a lightened copy of this one. */
+  --viz-identity: #a63263;
+  --viz-project:  #c9673a;
+  --viz-take:     #6366f1;
+  --viz-story:    #8a2bad;
+  --viz-lesson:   #1f9e7e;
+  --viz-fact:     #3878cc;
+  --viz-lens:     #a87f0e;
+  --viz-catalog:  #6d7fd0;
+}
+
+/* ============================================================
+   DARK THEME — a variable swap, nothing more.
+
+   Every semantic token is re-pointed; no component needs a `dark:`
+   variant to follow, because the utilities resolve through these
+   variables. partials/_theme_toggle.html puts `.dark` on <html>.
+
+   The dark surfaces stay in the ink-blue family (#14141f, not #000) so
+   the theme still reads as the same product. The accent lightens to
+   indigo-400: #6366f1 on a near-black surface is too dim to carry
+   emphasis, and text on top of it fails contrast.
+   ============================================================ */
+.dark {
+  --surface:    #14141f;
+  --surface-2:  #1c1c2b;
+  --surface-ink: #e8e8f0;
+  --ink:        #e8e8f0;
+  --muted:      #9a9ab0;
+  --line:       rgba(232, 232, 240, 0.14);
+
+  --accent:        #818cf8;
+  --accent-strong: #a5b4fc;
+  --accent-contrast: #14141f;   /* dark text on the lighter accent */
+  --accent-2:   #b49ada;
+  --accent-3:   #f0b492;
+  --signal:     #5fd0be;
+  --warn:       #f7e08f;
+  --danger:     #ff8787;
+
+  /* On a dark surface the relationship inverts: the readable text colour
+     is LIGHTER than the fill, not darker. */
+  --signal-ink: #6fdcc9;
+  --warn-ink:   #f5d987;
+  --danger-ink: #ff9b9b;
+
+  /* Brain-viz kinds, re-validated against the dark surface. */
+  --viz-identity: #c04a79;
+  --viz-project:  #cf7d4a;
+  --viz-take:     #7a84f4;
+  --viz-story:    #9b44be;
+  --viz-lesson:   #2aa88d;
+  --viz-fact:     #3f92dd;
+  --viz-lens:     #bb8c1c;
+  --viz-catalog:  #7787d2;
+
+  --shadow-card: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.35);
+  --shadow-soft: 0 1px 2px rgba(0,0,0,.35), 0 2px 8px rgba(0,0,0,.3);
+}

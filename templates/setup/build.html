@@ -1,0 +1,164 @@
+{% extends "setup/_layout.html" %}
+
+{% block step_title %}Build your brain{% endblock %}
+{% block step_blurb %}
+  Clone the repository, read every note's frontmatter into the index, and
+  materialise one snapshot per visibility tier.
+{% endblock %}
+
+{% block step_body %}
+<div x-data="build()" x-init="start()">
+
+  <template x-if="p.state === 'running'">
+    <div>
+      <div class="flex items-center justify-between text-sm">
+        <span x-text="p.label || 'Working…'">Working…</span>
+        <span class="text-muted font-mono" 
+              x-text="(p.step || 0) + '/' + (p.total || 3)"></span>
+      </div>
+      <div class="mt-2 h-2 w-full overflow-hidden rounded-full bg-surface-2">
+        {% comment %}
+          A genuinely dynamic width, so it cannot become a class. Alpine's
+          OBJECT binding syntax writes through element.style.setProperty(),
+          which CSP allows; the string form would call setAttribute and be
+          dropped.
+        {% endcomment %}
+        <div class="h-full transition-all bg-accent"
+             :style="{ width: Math.round(((p.step || 0) / (p.total || 3)) * 100) + '%' }"></div>
+      </div>
+      <p class="mt-3 text-xs text-muted">
+        Running on the worker — this page is only watching. Safe to close;
+        it will still be running when you come back.
+      </p>
+    </div>
+  </template>
+
+  <template x-if="p.state === 'done'">
+    <div>
+      <div class="notice notice-ok">
+        <div class="font-semibold text-signal-ink">Your brain is online.</div>
+        <div class="mt-1 text-muted font-mono">
+          <span x-text="p.entities"></span> entities · HEAD <span x-text="p.head"></span>
+        </div>
+      </div>
+      {# Zero entities is a valid state, not a failure — but it almost #}
+      {# always means the frontmatter isn't what the author thinks, so #}
+      {# say so here rather than leaving them with an empty brain. #}
+      <template x-if="!p.entities">
+        <div class="notice notice-warn mt-3">
+          <div class="font-semibold">No notes were indexed.</div>
+          <p class="mt-1 text-sm">
+            The repository was cloned and read, but nothing in it parsed as a
+            note. Check that your files sit under <code>knowledge/</code>,
+            <code>identity/</code>, <code>projects/</code> or
+            <code>lenses/</code> and open with a <code>---</code> frontmatter
+            block. You can go to the dashboard now and re-sync after fixing
+            them.
+          </p>
+        </div>
+      </template>
+      <form method="post" action="{% url 'setup:finish' %}" class="mt-5">
+        {% csrf_token %}
+        <button type="submit"
+                class="home-cta inline-flex items-center justify-center px-8 py-3 text-sm font-semibold">
+          Go to the dashboard &rarr;
+        </button>
+      </form>
+    </div>
+  </template>
+
+  <template x-if="p.state === 'failed'">
+    <div>
+      <div class="notice notice-danger">
+        <div class="font-semibold text-danger-ink" x-text="p.label || 'Build failed'"></div>
+        <pre class="pane-terminal mt-2 overflow-x-auto p-3 text-xs" x-text="p.error"></pre>
+      </div>
+      <div class="mt-4 flex gap-2">
+        {# See the note on the start form below: no optimistic x-if swap here. #}
+        <form method="post">
+          {% csrf_token %}
+          <button type="submit" class="home-cta inline-flex px-6 py-3 text-sm font-semibold">
+            Try again
+          </button>
+        </form>
+        <a href="{% url 'setup:step' slug='read' %}"
+           class="rounded-lg border px-4 py-2 text-sm border-line">
+          Back to the deploy key
+        </a>
+      </div>
+    </div>
+  </template>
+
+  {% comment %}
+    No optimistic "now running" state change on submit. Setting `p` here
+    would flip the surrounding `x-if` and REMOVE this form from the DOM
+    during its own submit event — and a detached form does not submit, so
+    the click would silently do nothing. The POST redirects back here and
+    the server has already written the running state, so the optimistic
+    update bought nothing anyway.
+  {% endcomment %}
+  {# `finish` clears the progress record, so revisiting /setup/ on a #}
+  {# configured install used to land here and offer "Build my brain" #}
+  {# again — inviting a pointless re-clone and reindex. When the brain #}
+  {# is already built, say so instead. #}
+  <template x-if="!p.state && built">
+    <div>
+      <div class="notice notice-ok">
+        <div class="font-semibold text-signal-ink">Your brain is already built.</div>
+        <p class="mt-1 text-sm text-muted">
+          Re-syncing lives in the ops UI now — you don't need the wizard for it.
+        </p>
+      </div>
+      <a href="{{ ops_url }}"
+         class="home-cta mt-5 inline-flex items-center justify-center px-8 py-3 text-sm font-semibold">
+        Go to the dashboard &rarr;
+      </a>
+    </div>
+  </template>
+
+  <template x-if="!p.state && !built">
+    <form method="post">
+      {% csrf_token %}
+      <button type="submit"
+              class="home-cta inline-flex items-center justify-center px-8 py-3 text-sm font-semibold">
+        Build my brain
+      </button>
+      <p class="mt-2 text-xs text-muted">
+        Usually a few seconds. It also shows up under Tasks in the ops UI.
+      </p>
+    </form>
+  </template>
+</div>
+
+{{ progress|json_script:"setup-progress" }}
+<script nonce="{{ csp_nonce }}">
+  function build() {
+    return {
+      p: JSON.parse(document.getElementById('setup-progress').textContent),
+      built: {{ built|yesno:"true,false" }},
+      timer: null,
+      start() {
+        // Poll rather than stream: a wizard tab that someone leaves open
+        // shouldn't hold a connection, and a missed tick costs nothing.
+        this.timer = setInterval(async () => {
+          // Stop entirely once we're done — the old version early-returned
+          // but left the interval firing for the life of the tab.
+          if (this.p.state === 'done') { this.stop(); return; }
+          if (document.visibilityState === 'hidden') return;
+          try {
+            const r = await fetch('{% url "setup:progress" %}');
+            if (r.ok) {
+              const next = await r.json();
+              this.p = next;
+              this.built = !!next.built;
+            }
+          } catch (e) { /* transient — the next tick retries */ }
+        }, 1500);
+      },
+      stop() {
+        if (this.timer) { clearInterval(this.timer); this.timer = null; }
+      },
+    };
+  }
+</script>
+{% endblock %}
