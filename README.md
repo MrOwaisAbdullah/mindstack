@@ -1,4 +1,4 @@
-# BrainOutside
+# Mindstack
 
 **Your brain, kept outside your head — where your agents can read it.**
 
