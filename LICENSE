@@ -1,7 +1,6 @@
-MIT License
+MIT License (Attribution Required)
 
-Copyright (c) 2026 Hasan Aboul Hasan
-Copyright (c) 2026 Owais Abdullah
+Copyright (c) 2024-2026 Owais Abdullah (https://github.com/MrOwaisAbdullah)
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -10,8 +9,12 @@ to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 copies of the Software, and to permit persons to whom the Software is
 furnished to do so, subject to the following conditions:
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+The above copyright notice, author attribution, and this permission notice
+shall be included in all copies or substantial portions of the Software.
+
+ATTRIBUTION & CREDITS:
+Any public deployment, distribution, fork, or derivative of this software must
+provide visible credit to Owais Abdullah (https://github.com/MrOwaisAbdullah).
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
